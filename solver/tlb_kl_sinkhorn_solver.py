@@ -1,5 +1,5 @@
 import torch
-from solver.utils_pytorch import l2_distortion, grad_l2_distortion, gw_cost, wfr_grad_distortion
+from solver.utils_pytorch import l2_distortion, grad_l2_distortion
 import numpy as np
 
 
@@ -40,6 +40,16 @@ class TLBSinkhornSolver(object):
         z = (rho * eps) / (2 * rho + eps)
         k = z * (c1 - c2)
         return u + k, v + k
+
+    def compute_local_cost(self, pi, a, Cx, b, Cy, rho, eps):
+        mu, nu = torch.sum(pi, dim=1), torch.sum(pi, dim=0)
+        A = torch.einsum('ij,j->i', Cx ** 2, mu)
+        B = torch.einsum('kl,l->k', Cy ** 2, nu)
+        C = torch.einsum('ij,kj->ik', Cx, torch.einsum('kl,jl->kj', Cy, pi))
+        kl_mu = torch.sum(mu * (mu / a  + 1e-10).log())
+        kl_nu = torch.sum(nu * (nu / b  + 1e-10).log())
+        kl_pi = torch.sum(pi * (pi / (a[:, None] * b[None, :])  + 1e-10).log())
+        return (A[:, None] + B[None, :] - 2 * C) + rho * kl_mu + rho * kl_nu + eps * kl_pi
 
     @staticmethod
     def quad_kl_div(pi, gamma, ref):
@@ -84,7 +94,6 @@ class TLBSinkhornSolver(object):
         return s_x, s_y
 
     def sinkhorn_procedure(self, T, u, v, a, b, rho, eps, exp_form=True):
-        # TODO: sinkhorn must be stabilized for GW if the plan tends to zero, it produces inf values
         if u is None or v is None:
             u, v = self.translate_potential(torch.zeros_like(a), torch.zeros_like(b), T, a, b, rho, eps)
         if exp_form:
@@ -115,73 +124,33 @@ class TLBSinkhornSolver(object):
             pi = ((u[:, None] + v[None, :] - T) / eps).exp() * a[:, None] * b[None, :]
         return u, v, pi
 
-    def propagate_gradient(self, pi, gamma, up, vp, ug, vg, a, Cx, b, Cy, rho, eps):
-        torch.set_grad_enabled(True)
-        Tp = grad_l2_distortion(pi, Cx, Cy) / pi.sum()
-        Tg = grad_l2_distortion(gamma, Cx, Cy) / gamma.sum()
-        sp_x, sp_y = self.aprox_softmin(Tg, a, b, rho, eps)
-        sg_x, sg_y = self.aprox_softmin(Tp, a, b, rho, eps)
-        for i in range(3):
-            vp, vg = sp_x(up), sg_x(ug)
-            up, ug = sp_y(vp), sg_y(vg)
-        pi = ((up[:, None] + vp[None, :] - Tg) / eps).exp() * a[:, None] * b[None, :]
-        gamma = ((ug[:, None] + vg[None, :] - Tp) / eps).exp() * a[:, None] * b[None, :]
-        return pi / pi.sum(), gamma / gamma.sum()
-
     def tlb_sinkhorn(self, a, Cx, b, Cy, rho, eps, init=None):
-        torch.set_grad_enabled(False)
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         ug, vg, up, vp = None, None, None, None
         for i in range(self.nits):
             pi_prev = pi.clone()
-            Tp = grad_l2_distortion(pi, Cx, Cy) / pi.sum()
-            ug, vg, gamma = self.sinkhorn_procedure(Tp, ug, vg, a, b, rho, eps)
-            Tg = grad_l2_distortion(gamma, Cx, Cy) / gamma.sum()
-            up, vp, pi = self.sinkhorn_procedure(Tg, up, vp, a, b, rho, eps)
-            pi = pi / pi.sum()
+            Tp = self.compute_local_cost(pi, a, Cx, b, Cy, rho, eps)
+            mp = pi.sum()
+            ug, vg, gamma = self.sinkhorn_procedure(Tp, ug, vg, a, b, mp * rho, mp * eps)
+            gamma = (mp / gamma.sum()).sqrt() * gamma
+            Tg = self.compute_local_cost(gamma, a, Cx, b, Cy, rho, eps)
+            mg = gamma.sum()
+            up, vp, pi = self.sinkhorn_procedure(Tg, up, vp, a, b, mg * rho, mg * eps)
+            pi = (mg / pi.sum()).sqrt() * pi
             if (pi - pi_prev).abs().max().item() < 1e-7:
                 break
-        gamma = gamma / gamma.sum()
-        if self.gradient:
-            pi, gamma = self.propagate_gradient(pi, gamma, up, vp, ug, vg, a, Cx, b, Cy, rho, eps)
-        theta = self.rescale_mass_plan(pi, gamma, a, Cx, b, Cy, rho, eps)
-        return theta * pi, theta * gamma
+        return pi, gamma
 
     def ugw_sinkhorn(self, a, Cx, b, Cy, rho, eps, init=None):
-        torch.set_grad_enabled(False)
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         up, vp = None, None
         for i in range(self.nits):
             pi_prev = pi.clone()
-            Tp = grad_l2_distortion(pi, Cx, Cy) / pi.sum()
-            up, vp, pi = self.sinkhorn_procedure(Tp, up, vp, a, b, rho, eps, exp_form=False)
-            pi = pi / pi.sum()
+            Tp = self.compute_local_cost(pi, a, Cx, b, Cy, rho, eps)
+            mp = pi.sum()
+            up, vp, pi = self.sinkhorn_procedure(Tp, up, vp, a, b, mp * rho, mp * eps)
             if (pi - pi_prev).abs().max().item() < 1e-7:
                 break
-        theta = self.rescale_mass_plan(pi, pi, a, Cx, b, Cy, rho, eps)
-        return theta * pi
-
-    def tlb_wfr_sinkhorn(self, a, Cx, b, Cy, rho, eps, init=None):
-        torch.set_grad_enabled(False)
-        # Initialize plan and local cost
-        pi = self.init_plan(a, b, init=init)
-        ug, vg, up, vp = None, None, None, None
-        for i in range(self.nits):
-            pi_prev = pi.clone()
-            Tp = (torch.from_numpy(wfr_grad_distortion(pi.cpu().data.numpy(), Cx.cpu().data.numpy(),
-                                                      Cy.cpu().data.numpy())) / pi.sum()).cuda()
-            assert ~torch.isnan(Tp).any()
-            ug, vg, gamma = self.sinkhorn_procedure(Tp, ug, vg, a, b, rho, eps)
-            Tg = (torch.from_numpy(wfr_grad_distortion(gamma.cpu().data.numpy(), Cx.cpu().data.numpy(),
-                                                      Cy.cpu().data.numpy())) / gamma.sum()).cuda()
-            up, vp, pi = self.sinkhorn_procedure(Tg, up, vp, a, b, rho, eps)
-            pi = pi / pi.sum()
-            if (pi - pi_prev).abs().max().item() < 1e-7:
-                break
-        gamma = gamma / gamma.sum()
-        if self.gradient:
-            pi, gamma = self.propagate_gradient(pi, gamma, up, vp, ug, vg, a, Cx, b, Cy, rho, eps)
-        theta = self.rescale_mass_plan(pi, gamma, a, Cx, b, Cy, rho, eps)
-        return theta * pi, theta * gamma
+        return pi

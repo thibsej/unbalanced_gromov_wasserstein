@@ -20,7 +20,6 @@ if not os.path.isdir(path):
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-
 def generate_data_target(sig=0.05):
     # Generate circles
     n1, n2 = 100, 25
@@ -96,26 +95,20 @@ def generate_data_source(sig=0.05):
     t = np.linspace(0, 2 * np.pi, n1)
     x1 = np.vstack((np.cos(t), np.sin(t))).transpose()
     x1[::2] = 0.9 * x1[::2]
-    # x2 = np.vstack((0.8 * np.cos(t), 0.8 * np.sin(t))).transpose()[:24] + x1[11]
 
     # Generate lines
     nu = 25
     u = np.linspace(0, 1, nu)
-    # x3 = 0.4 * (np.vstack((u, 1.4 * u)).transpose() - np.array([0.5, 0.5])) + x2[8]
     x4 = 0.7 * (np.vstack((u, -u)).transpose()) + x1[int(0.75 * n1)]
     x5 = 0.7 * (np.vstack((-u, -u)).transpose()) + x1[int(0.75 * n1)]
 
     # Generate random clusters
     n9, n10, n11 = 45, 25, 25
-    # x6 = 0.05 * np.random.normal(size=(10, 2)) + x2[4]
-    # x7 = 0.05 * np.random.normal(size=(10, 2)) + x2[12]
-    # x8 = 0.05 * np.random.normal(size=(10, 2)) + x2[-5]
     x9 = 0.1 * np.random.normal(size=(n9, 2)) + x1[int(0.75 * n1)]
     x10 = 0.05 * np.random.normal(size=(n10, 2)) + x4[-1]
     x11 = 0.05 * np.random.normal(size=(n11, 2)) + x5[-1]
 
     x = np.concatenate((x1, x4, x5, x9, x10, x11))
-    # x = np.concatenate((x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11))
     angle = 1.35 * np.pi
     rot = np.array([[np.cos(angle), np.sin(angle)], [-np.sin(angle), np.cos(angle)]])
     x = x.dot(rot)
@@ -210,7 +203,6 @@ def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlename=None):
     marg1, marg2 = np.sum(pi, axis=1), np.sum(pi, axis=0)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     col1 = np.cumsum(a) / np.sum(a)
-    # col2 = col1[np.argmax(pi, axis=0)]
     col2 = pi.transpose().dot(col1) / np.sum(pi, axis=0)
     cmap = get_cmap('hsv')
 
@@ -243,18 +235,15 @@ if __name__ == '__main__':
     sig = 0.04
     normalize_proba = True
     solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
-    rho = 10.
+    rho = .1
 
     a, x, Gx = generate_data_source(sig)
     Cx, Gx = convert_points_to_graph(x, Gx)
-    # draw_graph(x, Gx)
     assert ~np.isinf(Cx).any()
 
     b, y, Gy = generate_data_target(sig)
     Cy, Gy = convert_points_to_graph(y, Gy)
-    # draw_graph(y, Gy)
     assert ~np.isinf(Cy).any()
-    # raise SystemExit
 
     if normalize_proba:
         a, b = a / np.sum(a), b / np.sum(b)
@@ -279,7 +268,7 @@ if __name__ == '__main__':
     plt.show()
 
     if normalize_proba:
-        pi_b = gromov_wasserstein(Cx.numpy(), Cy.numpy(), a, b, loss_fun='square_loss')
+        pi_b = gromov_wasserstein(Cx.cpu().numpy(), Cy.cpu().numpy(), a, b, loss_fun='square_loss')
         plot_density_matching(pi_b, a, x, b, y, Gx, Gy, titlename='GW matching')
         plt.legend()
         plt.show()

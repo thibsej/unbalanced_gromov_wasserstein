@@ -58,7 +58,7 @@ def plot_density_matching(pi, a, x, b, y, idx, alpha, linewidth):
     plt.scatter(x[:, 0], x[:, 1], c=cmap1(0.3 * (a - np.amin(b)) / np.amin(b) + 0.4), s=10 * (a / a) ** 2, zorder=1)
     plt.scatter(y[:, 0], y[:, 1], c=cmap2(0.3 * (b - np.amin(b)) / np.amin(b) + 0.4), s=10 * (b / a) ** 2, zorder=1)
 
-    # Plot armax of coupling
+    # Plot argmax of coupling
     for i in idx:
         m = np.sum(pi[i, :])
         ids = (-pi[i, :]).argsort()[:30]
@@ -79,10 +79,11 @@ if __name__ == '__main__':
     rho = 1.
     eps = .01
     n_clust = 20
+    compute_balanced = False
     solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
 
     # Generate gaussian mixtures translated from each other
-    a, x, b, y = generate_data(n1, 0.3)
+    a, x, b, y = generate_data(n1, 0.7)
     clf = KMeans(n_clusters=n_clust)
     clf.fit(x)
     idx = np.zeros(n_clust)
@@ -94,24 +95,25 @@ if __name__ == '__main__':
     # Generate costs and transport plan
     Cx, Cy = euclid_dist(x, x), euclid_dist(y, y)
 
-    pi_b = gromov_wasserstein(Cx, Cy, a, b, loss_fun='square_loss')
-
-    plot_density_matching(pi_b, a, x, b, y, idx, alpha=1., linewidth=.5)
-    plt.legend()
-    plt.savefig(path + '/fig_matching_plan_balanced.png')
-    plt.show()
+    if compute_balanced:
+        pi_b = gromov_wasserstein(Cx, Cy, a, b, loss_fun='square_loss')
+        plot_density_matching(pi_b, a, x, b, y, idx, alpha=1., linewidth=.5)
+        plt.legend()
+        plt.savefig(path + '/fig_matching_plan_balanced.png')
+        plt.show()
 
     Cx, Cy = torch.from_numpy(Cx), torch.from_numpy(Cy)
 
-    rho_list = [.1]
+    rho_list = [0.1]
     peps_list = [2, 1, 0, -1, -2, -3]
+    # peps_list = [-2]
     for rho in rho_list:
         pi = None
         for p in peps_list:
             eps = 10 ** p
             print(f"Params = {rho, eps}")
             a, b = torch.from_numpy(a), torch.from_numpy(b)
-            pi, _ = solver.tlb_sinkhorn(a, Cx, b, Cy, rho=rho, eps=eps, init=pi)
+            pi, gamma = solver.tlb_sinkhorn(a, Cx, b, Cy, rho=rho, eps=eps, init=pi)
             print(f"Sum of transport plans = {pi.sum().item()}")
 
             # Plot matchings between measures
