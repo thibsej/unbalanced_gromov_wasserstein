@@ -9,16 +9,18 @@ from scipy.spatial import Delaunay
 
 from solver.utils_numpy import euclid_dist
 from ot.gromov import gromov_wasserstein
+from ot.partial import partial_gromov_wasserstein, entropic_partial_gromov_wasserstein
 from solver.tlb_kl_sinkhorn_solver import TLBSinkhornSolver
 
 path = os.getcwd() + "/output"
 if not os.path.isdir(path):
     os.mkdir(path)
-path = path + "/plots"
+path = path + "/plots_graph"
 if not os.path.isdir(path):
     os.mkdir(path)
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
 
 def generate_data_target(sig=0.05):
     # Generate circles
@@ -199,7 +201,7 @@ def draw_graph(x, G):
     plt.show()
 
 
-def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlename=None):
+def plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=None):
     marg1, marg2 = np.sum(pi, axis=1), np.sum(pi, axis=0)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     col1 = np.cumsum(a) / np.sum(a)
@@ -209,7 +211,7 @@ def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlename=None):
     # Display first graph
     ax[0].scatter(x[:, 0], x[:, 1], c=cmap(col1), s=(marg1 / a) ** 2 * 50., zorder=1)
     for (i, j) in Gx.edges:
-        w = np.minimum( (marg1[i] * marg1[j]) / (a[i] * a[j]), 1. )
+        w = np.minimum((marg1[i] * marg1[j]) / (a[i] * a[j]), 1.)
         t, u = [x[i][0], x[j][0]], [x[i][1], x[j][1]]
         ax[0].plot(t, u, c='k', alpha=0.5 * w, zorder=0)
     ax[0].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
@@ -219,7 +221,7 @@ def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlename=None):
     # Display second graph
     ax[1].scatter(y[:, 0], y[:, 1], c=cmap(col2), s=(marg2 / b) ** 2 * 50., zorder=1)
     for (i, j) in Gy.edges:
-        w = np.minimum( (marg2[i] * marg2[j]) / (b[i] * b[j]), 1. )
+        w = np.minimum((marg2[i] * marg2[j]) / (b[i] * b[j]), 1.)
         t, u = [y[i][0], y[j][0]], [y[i][1], y[j][1]]
         ax[1].plot(t, u, c='k', alpha=0.5 * w, zorder=0)
     ax[1].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
@@ -234,41 +236,59 @@ if __name__ == '__main__':
     np.random.seed(42)
     sig = 0.04
     normalize_proba = True
+    compare_with_gw = True
     solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
     rho = .1
 
+    # Check the graph is fully connex before running the code.
     a, x, Gx = generate_data_source(sig)
-    Cx, Gx = convert_points_to_graph(x, Gx)
-    assert ~np.isinf(Cx).any()
+    cx, Gx = convert_points_to_graph(x, Gx)
+    assert ~np.isinf(cx).any()
 
     b, y, Gy = generate_data_target(sig)
-    Cy, Gy = convert_points_to_graph(y, Gy)
-    assert ~np.isinf(Cy).any()
+    cy, Gy = convert_points_to_graph(y, Gy)
+    assert ~np.isinf(cy).any()
 
-    if normalize_proba:
+    if normalize_proba:  # Defaults to true to allow comparison with balanced GW
         a, b = a / np.sum(a), b / np.sum(b)
 
-    if torch.cuda.is_available():
-        a, b = torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda()
-        Cx, Cy = torch.from_numpy(Cx).cuda(), torch.from_numpy(Cy).cuda()
+    if torch.cuda.is_available():  # Uppercase are used for torch tensors
+        A, B = torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda()
+        CX, CY = torch.from_numpy(cx).cuda(), torch.from_numpy(cy).cuda()
     else:
-        a, b = torch.from_numpy(a), torch.from_numpy(b)
-        Cx, Cy = torch.from_numpy(Cx), torch.from_numpy(Cy)
+        A, B = torch.from_numpy(a), torch.from_numpy(b)
+        CX, CY = torch.from_numpy(cx), torch.from_numpy(cy)
 
-    pi = None
-    for eps in [10 ** e for e in [2., 1.5, 1, 0.5, 0., -0.5, -1., -1.5, -2]]:
-        pi, _ = solver.tlb_sinkhorn(a, Cx, b, Cy, rho=rho, eps=eps, init=pi)
-    print(f"Sum of transport plans = {pi.sum().item()}")
+    list_mass_pgw = []  # Keep masses of optimal plans to compare with Partial GW
+    for rho in [10 ** e for e in [1., 0., -1.]]:  # Compute UGW plans
+        PI = None
+        for eps in [10 ** e for e in [2., 1.5, 1, 0.5, 0., -0.5, -1., -1.5, -2]]:  # Simulated annealing loop
+            PI, _ = solver.tlb_sinkhorn(A, CX, B, CY, rho=rho, eps=eps, init=PI)
+        list_mass_pgw.append(PI.sum().item())
+        print(f"Sum of transport plans = {PI.sum().item()}")
 
-    # Plot matchings between measures
-    a, b = a.cpu().data.numpy(), b.cpu().data.numpy()
-    pi = pi.cpu().data.numpy()
-    plot_density_matching(pi, a, x, b, y, Gx, Gy, titlename=f'UGW matching, ($\\rho$,$\epsilon$)={rho, eps}')
-    plt.legend()
-    plt.show()
+        # Plot matchings between measures --> UGW
+        pi = PI.cpu().data.numpy()
+        plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=f'UGW matching, ($\\rho$,$\epsilon$)={rho, eps}')
+        plt.legend()
+        # plt.savefig(path + f'/pic_graph_ugw_rho{rho}.pdf', format='pdf')
+        plt.show()
 
-    if normalize_proba:
-        pi_b = gromov_wasserstein(Cx.cpu().numpy(), Cy.cpu().numpy(), a, b, loss_fun='square_loss')
-        plot_density_matching(pi_b, a, x, b, y, Gx, Gy, titlename='GW matching')
+    for m in list_mass_pgw:  # Compute partial GW plans
+        pi = a[:,None] * b[None,:]
+        for eps in [10 ** e for e in [2., 1.5, 1]]:  # Simulated annealing loop
+            pi = entropic_partial_gromov_wasserstein(cx, cy, a, b, eps, m=m, G0=pi)
+        pi = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=pi)
+
+        # Plot matchings between measures --> Partial GW
+        plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=f'Partial GW, mass={m:%.4f}')
+        plt.legend()
+        # plt.savefig(path + f'/pic_graph_ugw_rho{rho}.pdf', format='pdf')
+        plt.show()
+
+    if normalize_proba & compare_with_gw:  # Plot the behaviour of GW as reference
+        pi_gw = gromov_wasserstein(cx, cy, a, b, loss_fun='square_loss')
+        plot_density_matching(pi_gw, a, x, b, y, Gx, Gy, rho, titlename='GW matching')
+        # plt.savefig(path + f'/pic_graph_gw.pdf', format='pdf')
         plt.legend()
         plt.show()
