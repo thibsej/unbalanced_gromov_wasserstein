@@ -5,11 +5,14 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 import torch
 import networkx as nx
+import scipy as sp
 from scipy.spatial import Delaunay
 
 from solver.utils_numpy import euclid_dist
 from ot.gromov import gromov_wasserstein
-from ot.partial import partial_gromov_wasserstein, entropic_partial_gromov_wasserstein
+from ot.lp import emd
+from ot.partial import partial_gromov_wasserstein, partial_gromov_wasserstein2, entropic_partial_gromov_wasserstein, \
+    partial_wasserstein, partial_wasserstein2
 from solver.tlb_kl_sinkhorn_solver import TLBSinkhornSolver
 
 path = os.getcwd() + "/output"
@@ -201,11 +204,11 @@ def draw_graph(x, G):
     plt.show()
 
 
-def plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=None):
+def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile):
     marg1, marg2 = np.sum(pi, axis=1), np.sum(pi, axis=0)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     col1 = np.cumsum(a) / np.sum(a)
-    col2 = pi.transpose().dot(col1) / np.sum(pi, axis=0)
+    col2 = pi.transpose().dot(col1) / np.maximum(np.sum(pi, axis=0), 10**(-6))  # max for stability with partial GW
     cmap = get_cmap('hsv')
 
     # Display first graph
@@ -214,9 +217,12 @@ def plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=None):
         w = np.minimum((marg1[i] * marg1[j]) / (a[i] * a[j]), 1.)
         t, u = [x[i][0], x[j][0]], [x[i][1], x[j][1]]
         ax[0].plot(t, u, c='k', alpha=0.5 * w, zorder=0)
-    ax[0].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
-    ax[0].set_title('Source graph')
-    ax[0].set_aspect('equal')
+    # ax[0].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
+    # ax[0].set_aspect('equal')
+    ax[0].axis('off')
+    extent = ax[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fname = path + f'/pic_graph_source_{titlefile}.pdf'
+    fig.savefig(fname, format='pdf', bbox_inches=extent)
 
     # Display second graph
     ax[1].scatter(y[:, 0], y[:, 1], c=cmap(col2), s=(marg2 / b) ** 2 * 50., zorder=1)
@@ -224,11 +230,14 @@ def plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=None):
         w = np.minimum((marg2[i] * marg2[j]) / (b[i] * b[j]), 1.)
         t, u = [y[i][0], y[j][0]], [y[i][1], y[j][1]]
         ax[1].plot(t, u, c='k', alpha=0.5 * w, zorder=0)
-    ax[1].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
-    ax[1].set_title('target graph')
-    ax[1].set_aspect('equal')
+    # ax[1].tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False)
+    # ax[1].set_aspect('equal')
+    ax[1].axis('off')
+    extent = ax[1].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(path + f'/pic_graph_target_{titlefile}.pdf', format='pdf', bbox_inches=extent)
 
-    fig.suptitle(titlename, fontsize=20)
+    ax[0].set_title('Source graph')
+    ax[1].set_title('target graph')
     plt.tight_layout()
 
 
@@ -269,26 +278,36 @@ if __name__ == '__main__':
 
         # Plot matchings between measures --> UGW
         pi = PI.cpu().data.numpy()
-        plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=f'UGW matching, ($\\rho$,$\epsilon$)={rho, eps}')
+        plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile=f'UGW_rho{rho}_eps{eps}')
         plt.legend()
-        # plt.savefig(path + f'/pic_graph_ugw_rho{rho}.pdf', format='pdf')
         plt.show()
 
-    for m in list_mass_pgw:  # Compute partial GW plans
-        pi = a[:,None] * b[None,:]
-        for eps in [10 ** e for e in [2., 1.5, 1]]:  # Simulated annealing loop
-            pi = entropic_partial_gromov_wasserstein(cx, cy, a, b, eps, m=m, G0=pi)
-        pi = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=pi)
-
-        # Plot matchings between measures --> Partial GW
-        plot_density_matching(pi, a, x, b, y, Gx, Gy, rho, titlename=f'Partial GW, mass={m:%.4f}')
-        plt.legend()
-        # plt.savefig(path + f'/pic_graph_ugw_rho{rho}.pdf', format='pdf')
-        plt.show()
+    # for m in list_mass_pgw:  # Compute partial GW plans, initialized with simulated annealing
+    #     pi = a[:,None] * b[None,:]
+    #     for eps in [10 ** e for e in [2., 1.5, 1]]:  # Simulated annealing loop
+    #         pi = entropic_partial_gromov_wasserstein(cx, cy, a, b, eps, m=m, G0=pi)
+    #     pi = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=pi)
+    #     cost = partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=pi)
+    #     # Initialize with partial OT plan
+    #     M = sp.spatial.distance.cdist(x, y)
+    #     gam = partial_wasserstein(a, b, M, m=m)
+    #     gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
+    #     if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
+    #         pi = gam
+    #     # Initialize with OT plan
+    #     gam = emd(a, b, M)
+    #     gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
+    #     if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
+    #         pi = gam
+    #
+    #     # Plot matchings between measures --> Partial GW
+    #     plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile=f'PGW_mass{m:.3f}')
+    #     plt.legend()
+    #     plt.show()
 
     if normalize_proba & compare_with_gw:  # Plot the behaviour of GW as reference
+        pi = a[:, None] * b[None, :]
         pi_gw = gromov_wasserstein(cx, cy, a, b, loss_fun='square_loss')
-        plot_density_matching(pi_gw, a, x, b, y, Gx, Gy, rho, titlename='GW matching')
-        # plt.savefig(path + f'/pic_graph_gw.pdf', format='pdf')
+        plot_density_matching(pi_gw, a, x, b, y, Gx, Gy, titlefile='GW')
         plt.legend()
         plt.show()
