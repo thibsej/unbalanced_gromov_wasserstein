@@ -170,7 +170,7 @@ class BatchSinkhornSolver(object):
                 if ((mass[:, None] * self.eps) * (u.log() - u_prev.log())).abs().max().item() < 1e-7:
                     break
             pi = u[:, :, None] * v[:, None, :] * K * a[:, :, None] * b[:, None, :]
-            u, v = (mass[:, None, None] * self.eps) * u.log(), (mass[:, None, None] * self.eps) * v.log()
+            u, v = (mass[:, None] * self.eps) * u.log(), (mass[:, None] * self.eps) * v.log()
 
         if ~exp_form:  # Else perform Sinkhorn algorithm in LSE form
             s_x, s_y = self.aprox_softmin(T, a, b, mass)
