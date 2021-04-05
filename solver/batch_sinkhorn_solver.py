@@ -1,12 +1,19 @@
 import torch
-# from utils_pytorch import l2_distortion, grad_l2_distortion
-# from solver.utils_pytorch import l2_distortion, grad_l2_distortion
-import numpy as np
 
 
 class BatchSinkhornSolver(object):
 
     def __init__(self, nits, nits_sinkhorn, gradient=False, tol=1e-7, tol_sinkhorn=1e-7, eps=1.0, rho=None):
+        """
+
+        :param nits: Number of iterations to update the plans of (U)GW
+        :param nits_sinkhorn: Number of iterations to perform Sinkhorn updates in inner loop
+        :param gradient: Asks to save gradients if True for backpropagation
+        :param tol: Tolerance between updates of the plan to stop iterations
+        :param tol_sinkhorn: Tolerance between updates of the Sinkhorn potentials to stop iterations
+        :param eps: parameter of entropic regularization
+        :param rho: Parameter of relaxation of marginals. Set to None to compute GW instead of UGW.
+        """
         self.nits = nits
         self.nits_sinkhorn = nits_sinkhorn
         self.gradient = gradient
@@ -25,25 +32,64 @@ class BatchSinkhornSolver(object):
 
     @staticmethod
     def quad_kl_div(pi, gamma, ref):
-        massp, massg = pi.sum(dim=(1, 2)), gamma.sum(dim=(1, 2)),
+        """
+        Compute the quadratic entropy $KL^\otimes(\pi\otimes\gamma | ref)$ with full plans
+        :param pi: first input, torch.Tensor of size [Batch, size_X, size_Y]
+        :param gamma: second input torch.Tensor of size [Batch, size_X, size_Y]
+        :param ref: Reference of the KL entropy to compare with $\pi\otimes\gamma$
+        :return: torch.float
+        """
+        massp, massg = pi.sum(dim=(1, 2)), gamma.sum(dim=(1, 2))
         return massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=(1, 2)) \
                + massp * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=(1, 2)) \
                - massp * massg + ref.sum(dim=(1, 2)) ** 2
 
     @staticmethod
+    def quad_kl_div_marg(pi, gamma, ref):
+        """
+        Compute the quadratic entropy $KL^\otimes(\pi\otimes\gamma | ref)$ with plans marginals
+        :param pi: first input, torch.Tensor of size [Batch, size_X]
+        :param gamma: second input torch.Tensor of size [Batch, size_X]
+        :param ref: Reference of the KL entropy to compare
+        :return: torch.float
+        """
+        massp, massg = pi.sum(dim=1), gamma.sum(dim=1)
+        return massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=1) \
+               + massp * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=1) \
+               - massp * massg + ref.sum(dim=1) ** 2
+
+    @staticmethod
     def l2_distortion(pi, gamma, Cx, Cy):
-        A = torch.einsum('ijk,ij,ik->i', Cx ** 2, pi.sum(dim=(1, 2)), gamma.sum(dim=(1, 2)))
-        B = torch.einsum('ijk,ij,ik->i', Cy ** 2, pi.sum(dim=(1, 2)), gamma.sum(dim=(1, 2)))
+        """
+        Computes the L2 distortion $\int |C_X - C_Y|^2 d\pi d\gamma$
+        :param pi: torch.Tensor of size [Batch, size_X, size_Y]
+        :param gamma: torch.Tensor of size [Batch, size_X, size_Y]
+        :param Cx: torch.Tensor of size [Batch, size_X, size_X]
+        :param Cy: torch.Tensor of size [Batch, size_Y, size_Y]
+        :return: torch.float of size [Batch]
+        """
+        A = torch.einsum('ijk,ij,ik->i', Cx ** 2, pi.sum(dim=2), gamma.sum(dim=2))
+        B = torch.einsum('ijk,ij,ik->i', Cy ** 2, pi.sum(dim=1), gamma.sum(dim=1))
         C = torch.sum(torch.einsum('kij,kjl->kil', Cx, pi) * torch.einsum('kij,kjl->kil', gamma, Cy), dim=(1, 2))
         return A + B - 2 * C
 
     def ugw_cost(self, pi, gamma, a, Cx, b, Cy):
+        """
+        Compute the full (U)GW functional with entropic term and KL penalty of marginals
+        :param pi: torch.Tensor of size [Batch, size_X, size_Y]
+        :param gamma: torch.Tensor of size [Batch, size_X, size_Y]
+        :param a: torch.Tensor of size [Batch, size_X]
+        :param Cx: torch.Tensor of size [Batch, size_X, size_X]
+        :param b: torch.Tensor of sier [Batch, size_Y
+        :param Cy: torch.Tensor of size [Batch, size_Y, size_Y]
+        :return: torch.float of size [Batch]
+        """
         if self.rho is None:
-            return self.l2_distortion(pi, Cx, Cy) \
+            return self.l2_distortion(pi, gamma, Cx, Cy) \
                    + self.eps * self.quad_kl_div(pi, gamma, a[:, :, None] * b[:, None, :])
-        return self.l2_distortion(pi, Cx, Cy) \
-               + self.rho * self.quad_kl_div(torch.sum(pi, dim=2), torch.sum(gamma, dim=2), a) \
-               + self.rho * self.quad_kl_div(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), b) \
+        return self.l2_distortion(pi, gamma, Cx, Cy) \
+               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=2), torch.sum(gamma, dim=2), a) \
+               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), b) \
                + self.eps * self.quad_kl_div(pi, gamma, a[:, :, None] * b[:, None, :])
 
     #####################################################
@@ -76,6 +122,15 @@ class BatchSinkhornSolver(object):
                    + (self.rho * kl_mu + self.rho * kl_nu + self.eps * kl_pi)[:, None, None]
 
     def ugw_sinkhorn(self, a, Cx, b, Cy, init=None):
+        """
+        Solver the regularized UGW problem, keeps only one plan
+        :param a: torch.Tensor of size [Batch, size_X]
+        :param Cx: torch.Tensor of size [Batch, size_X, size_X]
+        :param b: torch.Tensor of size [Batch, size_Y]
+        :param Cy: torch.Tensor of size [Batch, size_Y, size_Y]
+        :param init: transport plan at initialization, torch.Tensor of size [Batch, size_X, size_Y]
+        :return: torch.Tensor of size [Batch, size_X, size_Y]
+        """
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         up, vp = None, None
@@ -90,6 +145,15 @@ class BatchSinkhornSolver(object):
         return pi
 
     def alternate_sinkhorn(self, a, Cx, b, Cy, init=None):
+        """
+        Solver the regularized UGW problem, returs both plans $(\pi,\gamma)$
+        :param a: torch.Tensor of size [Batch, size_X]
+        :param Cx: torch.Tensor of size [Batch, size_X, size_X]
+        :param b: torch.Tensor of size [Batch, size_Y]
+        :param Cy: torch.Tensor of size [Batch, size_Y, size_Y]
+        :param init: transport plan at initialization, torch.Tensor of size [Batch, size_X, size_Y]
+        :return: two torch.Tensor of size [Batch, size_X, size_Y]
+        """
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         ug, vg, up, vp = None, None, None, None
