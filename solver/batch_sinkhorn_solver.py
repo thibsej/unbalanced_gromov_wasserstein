@@ -29,7 +29,7 @@ class BatchSinkhornSolver(object):
     #####################################################
     # Computation of GW costs
     #####################################################
-
+    # TODO: Update the sums with "keepdim=true for axis 0"
     @staticmethod
     def quad_kl_div(pi, gamma, ref):
         """
@@ -97,7 +97,14 @@ class BatchSinkhornSolver(object):
     #####################################################
 
     @staticmethod
-    def init_plan(a, b, init):
+    def init_plan(a, b, init=None):
+        """
+        Initialize the plan if None is given, otherwise use the input plan
+        :param a: torch.Tensor of size [Batch, size_X]
+        :param b: torch.Tensor of size [Batch, size_Y]
+        :param init: torch.Tensor of size [Batch, size_X, size_Y], defaults to None
+        :return: torch.Tensor of size [Batch, size_X, size_Y]
+        """
         if init is not None:
             return init
         else:
