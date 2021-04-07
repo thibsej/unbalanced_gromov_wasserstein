@@ -1,9 +1,10 @@
 import torch
 
 
-class BatchSinkhornSolver(object):
+class VanillaSinkhornSolver(object):
 
-    def __init__(self, nits, nits_sinkhorn, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0, rho=None):
+    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
+                 rho=None):
         """
 
         :param nits: Number of iterations to update the plans of (U)GW
@@ -14,17 +15,13 @@ class BatchSinkhornSolver(object):
         :param eps: parameter of entropic regularization
         :param rho: Parameter of relaxation of marginals. Set to None to compute GW instead of UGW.
         """
-        self.nits = nits
+        self.nits_plan = nits_plan
         self.nits_sinkhorn = nits_sinkhorn
         self.gradient = gradient
         self.tol_plan = tol_plan
         self.tol_sinkhorn = tol_sinkhorn
         self.eps = eps
         self.rho = rho
-        if rho is None:
-            self.tau = 1.
-        else:
-            self.tau = 1 / (1 + (self.eps / self.rho))
 
     #####################################################
     # Computation of GW costs
@@ -54,10 +51,10 @@ class BatchSinkhornSolver(object):
         :param ref: Reference of the KL entropy to compare
         :return: torch.Tensor of size 1
         """
-        massp, massg = pi.sum(dim=1), gamma.sum(dim=1)
-        return massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=1) \
-               + massp * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=1) \
-               - massp * massg + ref.sum(dim=1) ** 2
+        massp, massg = pi.sum(), gamma.sum()
+        return massg * torch.sum(pi * (pi / ref + 1e-10).log()) \
+               + massp * torch.sum(gamma * (gamma / ref + 1e-10).log()) \
+               - massp * massg + ref.sum() ** 2
 
     @staticmethod
     def l2_distortion(pi, gamma, Cx, Cy):
@@ -142,7 +139,7 @@ class BatchSinkhornSolver(object):
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         up, vp = None, None
-        for i in range(self.nits):
+        for i in range(self.nits_plan):
             pi_prev = pi.clone()
             Tp = self.compute_local_cost(pi, a, Cx, b, Cy)
             mp = pi.sum()
@@ -165,7 +162,7 @@ class BatchSinkhornSolver(object):
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         ug, vg, up, vp = None, None, None, None
-        for i in range(self.nits):
+        for i in range(self.nits_plan):
             pi_prev = pi.clone()
 
             # Fix pi and optimize wrt gamma
@@ -189,22 +186,32 @@ class BatchSinkhornSolver(object):
     #####################################################
 
     def kl_prox_softmin(self, K, a, b):
+        if self.rho is None:
+            tau = 1.
+        else:
+            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(v):
-            return torch.einsum('ij,j->i', K, b * v) ** (-self.tau)
+            return torch.einsum('ij,j->i', K, b * v) ** (-tau)
 
         def s_x(u):
-            return torch.einsum('ij,i->j', K, a * u) ** (-self.tau)
+            return torch.einsum('ij,i->j', K, a * u) ** (-tau)
 
         return s_x, s_y
 
     def aprox_softmin(self, C, a, b, mass):
+        if self.rho is None:
+            tau = 1.
+        else:
+            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(g):
-            return - mass * self.tau * self.eps * ((g / self.eps + b.log())[None, :] - C / self.eps).logsumexp(dim=1)
+            return - mass * tau * self.eps * ((g / (mass * self.eps) + b.log())[None, :]
+                                                   - C / (mass * self.eps)).logsumexp(dim=1)
 
         def s_x(f):
-            return - mass * self.tau * self.eps * ((f / self.eps + a.log())[:, None] - C / self.eps).logsumexp(dim=0)
+            return - mass * tau * self.eps * ((f / (mass * self.eps) + a.log())[:, None]
+                                                   - C / (mass * self.eps)).logsumexp(dim=0)
 
         return s_x, s_y
 
@@ -236,7 +243,7 @@ class BatchSinkhornSolver(object):
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
         if u is None or v is None:  # Initialize potentials by finding best translation
             u, v = torch.zeros_like(a), torch.zeros_like(b)
-        u, v = self.translate_potential(u, v, T, a, b, mass)
+            u, v = self.translate_potential(u, v, T, a, b, mass)
 
         if exp_form:  # Check if acceleration via exp-sinkhorn has no underflow
             K = (-T / (mass * self.eps)).exp()

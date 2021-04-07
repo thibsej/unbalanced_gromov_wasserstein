@@ -3,7 +3,8 @@ import torch
 
 class BatchSinkhornSolver(object):
 
-    def __init__(self, nits, nits_sinkhorn, gradient=False, tol=1e-7, tol_sinkhorn=1e-7, eps=1.0, rho=None):
+    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol=1e-7, tol_sinkhorn=1e-7,
+                 eps=1.0, rho=None):
         """
 
         :param nits: Number of iterations to update the plans of (U)GW
@@ -14,17 +15,13 @@ class BatchSinkhornSolver(object):
         :param eps: parameter of entropic regularization
         :param rho: Parameter of relaxation of marginals. Set to None to compute GW instead of UGW.
         """
-        self.nits = nits
+        self.nits_plan = nits_plan
         self.nits_sinkhorn = nits_sinkhorn
         self.gradient = gradient
         self.tol = tol
         self.tol_sinkhorn = tol_sinkhorn
         self.eps = eps
         self.rho = rho
-        if rho is None:
-            self.tau = 1.
-        else:
-            self.tau = 1 / (1 + (self.eps / self.rho))
 
     #####################################################
     # Computation of GW costs
@@ -141,7 +138,7 @@ class BatchSinkhornSolver(object):
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         up, vp = None, None
-        for i in range(self.nits):
+        for i in range(self.nits_plan):
             pi_prev = pi.clone()
             Tp = self.compute_local_cost(pi, a, Cx, b, Cy)
             mp = pi.sum(dim=(1, 2))
@@ -164,7 +161,7 @@ class BatchSinkhornSolver(object):
         # Initialize plan and local cost
         pi = self.init_plan(a, b, init=init)
         ug, vg, up, vp = None, None, None, None
-        for i in range(self.nits):
+        for i in range(self.nits_plan):
             pi_prev = pi.clone()
 
             # Fix pi and optimize wrt gamma
@@ -188,22 +185,30 @@ class BatchSinkhornSolver(object):
     #####################################################
 
     def kl_prox_softmin(self, K, a, b):
+        if self.rho is None:
+            tau = 1.
+        else:
+            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(v):
-            return torch.einsum('bij,bj->bi', K, b * v) ** (-self.tau)
+            return torch.einsum('bij,bj->bi', K, b * v) ** (-tau)
 
         def s_x(u):
-            return torch.einsum('bij,bi->bj', K, a * u) ** (-self.tau)
+            return torch.einsum('bij,bi->bj', K, a * u) ** (-tau)
 
         return s_x, s_y
 
     def aprox_softmin(self, C, a, b, mass):
+        if self.rho is None:
+            tau = 1.
+        else:
+            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(g):
-            return - mass[:, None] * self.tau * self.eps * ((g / self.eps + b.log())[:, None, :] - C / self.eps).logsumexp(dim=2)
+            return - mass[:, None] * tau * self.eps * ((g / self.eps + b.log())[:, None, :] - C / self.eps).logsumexp(dim=2)
 
         def s_x(f):
-            return - mass[:, None] * self.tau * self.eps * ((f / self.eps + a.log())[:, :, None] - C / self.eps).logsumexp(dim=1)
+            return - mass[:, None] * tau * self.eps * ((f / self.eps + a.log())[:, :, None] - C / self.eps).logsumexp(dim=1)
 
         return s_x, s_y
 
