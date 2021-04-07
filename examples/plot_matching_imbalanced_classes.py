@@ -6,9 +6,9 @@ from matplotlib.cm import get_cmap
 import torch
 from sklearn.cluster import KMeans
 
-from solver.utils_numpy import euclid_dist
+from solver.utils import euclid_dist
 from ot.gromov import gromov_wasserstein
-from solver.tlb_kl_sinkhorn_solver import TLBSinkhornSolver
+from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
 
 path = os.getcwd() + "/output"
 if not os.path.isdir(path):
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     eps = .01
     n_clust = 20
     compute_balanced = False
-    solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
+    solver = VanillaSinkhornSolver(nits_plan=500, nits_sinkhorn=1000, gradient=False, tol_plan=1e-3, tol_sinkhorn=1e-3)
 
     # Generate gaussian mixtures translated from each other
     a, x, b, y = generate_data(n1, 0.7)
@@ -106,14 +106,15 @@ if __name__ == '__main__':
 
     rho_list = [0.1]
     peps_list = [2, 1, 0, -1, -2, -3]
-    # peps_list = [-2]
     for rho in rho_list:
+        solver.rho = rho
         pi = None
         for p in peps_list:
             eps = 10 ** p
+            solver.eps = eps
             print(f"Params = {rho, eps}")
             a, b = torch.from_numpy(a), torch.from_numpy(b)
-            pi, gamma = solver.tlb_sinkhorn(a, Cx, b, Cy, rho=rho, eps=eps, init=pi)
+            pi = solver.ugw_sinkhorn(a, Cx, b, Cy, init=pi)
             print(f"Sum of transport plans = {pi.sum().item()}")
 
             # Plot matchings between measures

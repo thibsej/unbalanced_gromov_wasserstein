@@ -8,12 +8,12 @@ import networkx as nx
 import scipy as sp
 from scipy.spatial import Delaunay
 
-from solver.utils_numpy import euclid_dist
+from solver.utils import euclid_dist
 from ot.gromov import gromov_wasserstein
 from ot.lp import emd
 from ot.partial import partial_gromov_wasserstein, partial_gromov_wasserstein2, entropic_partial_gromov_wasserstein, \
-    partial_wasserstein, partial_wasserstein2
-from solver.tlb_kl_sinkhorn_solver import TLBSinkhornSolver
+    partial_wasserstein
+from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
 
 path = os.getcwd() + "/output"
 if not os.path.isdir(path):
@@ -23,6 +23,8 @@ if not os.path.isdir(path):
     os.mkdir(path)
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
+# TODO: Debug mass of plans, constant to 1 for any rho
 
 
 def generate_data_target(sig=0.05):
@@ -207,6 +209,7 @@ def draw_graph(x, G):
 def plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile):
     marg1, marg2 = np.sum(pi, axis=1), np.sum(pi, axis=0)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    fig.suptitle(titlefile, fontsize=20)
     col1 = np.cumsum(a) / np.sum(a)
     col2 = pi.transpose().dot(col1) / np.maximum(np.sum(pi, axis=0), 10**(-6))  # max for stability with partial GW
     cmap = get_cmap('hsv')
@@ -246,8 +249,7 @@ if __name__ == '__main__':
     sig = 0.04
     normalize_proba = True
     compare_with_gw = True
-    solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
-    rho = .1
+    solver = VanillaSinkhornSolver(nits_plan=500, nits_sinkhorn=1000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-5)
 
     # Check the graph is fully connex before running the code.
     a, x, Gx = generate_data_source(sig)
@@ -269,11 +271,13 @@ if __name__ == '__main__':
         CX, CY = torch.from_numpy(cx), torch.from_numpy(cy)
 
     list_mass_pgw = []  # Keep masses of optimal plans to compare with Partial GW
-    for rho in [10 ** e for e in [1., 0., -1.]]:  # Compute UGW plans
+    for rho in [10 ** e for e in [-1., 0., 1.]]:  # Compute UGW plans
+        solver.rho = rho
         PI = None
-        for eps in [10 ** e for e in [2., 1.5, 1, 0.5, 0., -0.5, -1., -1.5, -2]]:  # Simulated annealing loop
-            PI, _ = solver.tlb_sinkhorn(A, CX, B, CY, rho=rho, eps=eps, init=PI)
-        list_mass_pgw.append(PI.sum().item())
+        for eps in [10 ** e for e in [2., 1.5, 1, 0.5, 0., -0.5, -1.]]:  # Simulated annealing loop
+            solver.eps = eps
+            PI, _ = solver.alternate_sinkhorn(A, CX, B, CY, init=PI)
+        list_mass_pgw.append(PI.sum().item()) # Save mass for comparison with Partial-GW
         print(f"Sum of transport plans = {PI.sum().item()}")
 
         # Plot matchings between measures --> UGW
@@ -282,28 +286,30 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-    # for m in list_mass_pgw:  # Compute partial GW plans, initialized with simulated annealing
-    #     pi = a[:,None] * b[None,:]
-    #     for eps in [10 ** e for e in [2., 1.5, 1]]:  # Simulated annealing loop
-    #         pi = entropic_partial_gromov_wasserstein(cx, cy, a, b, eps, m=m, G0=pi)
-    #     pi = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=pi)
-    #     cost = partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=pi)
-    #     # Initialize with partial OT plan
-    #     M = sp.spatial.distance.cdist(x, y)
-    #     gam = partial_wasserstein(a, b, M, m=m)
-    #     gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
-    #     if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
-    #         pi = gam
-    #     # Initialize with OT plan
-    #     gam = emd(a, b, M)
-    #     gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
-    #     if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
-    #         pi = gam
-    #
-    #     # Plot matchings between measures --> Partial GW
-    #     plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile=f'PGW_mass{m:.3f}')
-    #     plt.legend()
-    #     plt.show()
+    # Comparison with Partial GW from POT
+    for m in list_mass_pgw:
+        # TRIAL 1 - initialized with simulated annealing
+        pi = a[:,None] * b[None,:]
+        for eps in [10 ** e for e in [2., 1.5, 1]]:  # Simulated annealing loop
+            pi = entropic_partial_gromov_wasserstein(cx, cy, a, b, eps, m=m, G0=pi)
+        pi = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=pi)
+        cost = partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=pi)
+        # TRIAL 2 - Initialize with partial OT plan
+        M = sp.spatial.distance.cdist(x, y)
+        gam = partial_wasserstein(a, b, M, m=m)
+        gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
+        if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
+            pi = gam
+        # TRIAL 3 - Initialize with OT plan
+        gam = emd(a, b, M)
+        gam = partial_gromov_wasserstein(cx, cy, a, b, m=m, G0=gam)
+        if partial_gromov_wasserstein2(cx, cy, a, b, m=m, G0=gam) < cost:
+            pi = gam
+
+        # Plot matchings between measures --> Partial GW
+        plot_density_matching(pi, a, x, b, y, Gx, Gy, titlefile=f'PGW_mass{m:.3f}')
+        plt.legend()
+        plt.show()
 
     if normalize_proba & compare_with_gw:  # Plot the behaviour of GW as reference
         pi = a[:, None] * b[None, :]

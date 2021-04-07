@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from solver.utils_numpy import euclid_dist
+from solver.utils import euclid_dist
 from ot.gromov import gromov_wasserstein
-from solver.tlb_kl_sinkhorn_solver import TLBSinkhornSolver
+from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
 
 path = os.getcwd() + "/output"
 if not os.path.isdir(path):
@@ -53,7 +53,7 @@ def plot_density_matching(pi, a, x, b, y, ids, alpha, linewidth, fontsize, ftitl
     plt.tight_layout()
     plt.xlim(-2.3, 2.3)
     plt.ylim(-1.5, 1.5)
-    # plt.title(ftitle, fontsize=fontsize)
+    plt.title(ftitle, fontsize=fontsize)
     if fname is not None:
         plt.savefig(fname)
 
@@ -63,8 +63,8 @@ if __name__ == '__main__':
     rho = 0.01
     eps = 0.001
     nsample, nout = 300, 50
-    compute_balanced = False
-    solver = TLBSinkhornSolver(nits=500, nits_sinkhorn=1000, gradient=False, tol=1e-3, tol_sinkhorn=1e-3)
+    compute_balanced = True
+    solver = VanillaSinkhornSolver(nits_plan=500, nits_sinkhorn=1000, gradient=False, tol_plan=1e-3, tol_sinkhorn=1e-3)
     ids = np.concatenate((np.arange(start=0, stop=nsample, step=10),
                           np.arange(start=nsample, stop=nsample + nout, step=10)))
 
@@ -83,18 +83,21 @@ if __name__ == '__main__':
             plt.savefig(f"matching_outlier_balanced_noise{noise}.png")
             plt.show()
 
-        Cx, Cy = torch.from_numpy(Cx).cuda(), torch.from_numpy(Cy).cuda()
+        # Lowercase for numpy, Uppercase for torch
+        CX, CY = torch.from_numpy(Cx).cuda(), torch.from_numpy(Cy).cuda()
+        A, B = torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda()
 
-        for rho, eps in [(0.01, 0.001), (1.0, 0.001)]:
-            print(f"        PARAMS = {rho, eps}")
-            a, b = torch.from_numpy(a).cuda(), torch.from_numpy(b).cuda()
-            pi, _ = solver.tlb_sinkhorn(a, Cx, b, Cy, rho=rho, eps=eps, init=None)
-            print(f"Sum of transport plans = {pi.sum().item()}")
+        # Compute the matching
+        for rho in [0.01, 1.]:
+            PI = None
+            for eps in [1., 0.1, 0.01, 0.001]:
+                print(f"        PARAMS = {rho, eps}")
+                solver.rho, solver.eps = rho, eps
+                PI = solver.ugw_sinkhorn(A, CX, B, CY, init=PI)
+            print(f"Mass of transport plan = {PI.sum().item()}")
 
             # Plot matchings between measures
-            a, b = a.cpu().data.numpy(), b.cpu().data.numpy()
-            pi = pi.cpu().data.numpy()
-            print(f"Total mass of plan is {np.sum(pi)}")
+            pi = PI.cpu().data.numpy()
             plot_density_matching(pi, a, x, b, y, ids, alpha=1., linewidth=1., fontsize=16,
                                   ftitle=f'Unbalanced GW matching, $\\rho$={rho}, $\epsilon$={eps}', fname=None)
             plt.legend()
