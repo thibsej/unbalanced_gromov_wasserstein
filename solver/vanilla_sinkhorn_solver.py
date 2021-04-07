@@ -6,7 +6,6 @@ class VanillaSinkhornSolver(object):
     def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
                  rho=None):
         """
-
         :param nits: Number of iterations to update the plans of (U)GW
         :param nits_sinkhorn: Number of iterations to perform Sinkhorn updates in inner loop
         :param gradient: Asks to save gradients if True for backpropagation
@@ -243,7 +242,7 @@ class VanillaSinkhornSolver(object):
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
         if u is None or v is None:  # Initialize potentials by finding best translation
             u, v = torch.zeros_like(a), torch.zeros_like(b)
-            u, v = self.translate_potential(u, v, T, a, b, mass)
+        u, v = self.translate_potential(u, v, T, a, b, mass)
 
         if exp_form:  # Check if acceleration via exp-sinkhorn has no underflow
             K = (-T / (mass * self.eps)).exp()

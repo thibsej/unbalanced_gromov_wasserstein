@@ -228,7 +228,8 @@ class BatchSinkhornSolver(object):
 
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
         if u is None or v is None:  # Initialize potentials by finding best translation
-            u, v = self.translate_potential(torch.zeros_like(a), torch.zeros_like(b), T, a, b, mass)
+            u, v = torch.zeros_like(a), torch.zeros_like(b)
+        u, v = self.translate_potential(u, v, T, a, b, mass)
 
         if exp_form:  # Check if acceleration via exp-sinkhorn has no underflow
             K = (-T / (mass[:, None, None] * self.eps)).exp()
