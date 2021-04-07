@@ -4,10 +4,10 @@ from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
 from solver.utils import generate_measure
 torch.set_printoptions(8)
 
-# Set up a solver for (U)GW
+# Set up a solver for KL-(U)GW
 # Set rho=None to run balanced GW computation
 solv = VanillaSinkhornSolver(nits_plan=1000, nits_sinkhorn=1000, gradient=False, tol_plan=1e-5, tol_sinkhorn=1e-5,
-                             eps=1.0, rho=None)
+                             eps=1.0, rho=1.)
 
 # Generate two mm-spaces with euclidean metrics
 a, Cx, _ = generate_measure(n_batch=1, n_sample=5, n_dim=3)
@@ -25,3 +25,14 @@ print("Cost of the biconvex relaxation: ", cost)
 cost_pi = solv.ugw_cost(pi, pi, a, Cx, b, Cy)
 cost_gamma = solv.ugw_cost(gamma, gamma, a, Cx, b, Cy)
 print("UGW cost with twice the same inputs for pi / gamma: ", (cost_pi, cost_gamma))
+
+# Switch to solving Balanced-GW
+solv.rho = None
+
+# Compute the loss and check the biconvex relaxation
+pi, gamma = solv.alternate_sinkhorn(a, Cx, b, Cy)
+cost = solv.ugw_cost(pi, gamma, a, Cx, b, Cy)
+print("GW cost of the biconvex relaxation: ", cost)
+cost_pi = solv.ugw_cost(pi, pi, a, Cx, b, Cy)
+cost_gamma = solv.ugw_cost(gamma, gamma, a, Cx, b, Cy)
+print("GW cost with twice the same inputs for pi / gamma: ", (cost_pi, cost_gamma))
