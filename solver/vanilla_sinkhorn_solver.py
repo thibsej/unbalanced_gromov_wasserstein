@@ -107,6 +107,10 @@ class VanillaSinkhornSolver(object):
         else:
             return a[:, None] * b[None, :] / (a.sum() * b.sum()).sqrt()
 
+
+
+
+
     def compute_local_cost(self, pi, a, Cx, b, Cy):
         if self.rho is None:
             A = torch.einsum('ij,j->i', Cx ** 2, a)

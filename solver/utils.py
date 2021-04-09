@@ -21,12 +21,13 @@ def dist_matrix(x_i, y_j, p):
         return C_e ** (p)
 
 
-def generate_measure(n_batch, n_sample, n_dim):
+def generate_measure(n_batch, n_sample, n_dim,equal = False):
     """
     Generate a batch of probability measures in R^d sampled over the unit square
     :param n_batch: Number of batches
     :param n_sample: Number of sampling points in R^d
     :param n_dim: Dimension of the feature space
+    :param equal: Weights equal to 1
     :return: A (Nbatch, Nsample, Ndim) torch.Tensor
     """
     m = torch.distributions.exponential.Exponential(1.0)
@@ -35,4 +36,6 @@ def generate_measure(n_batch, n_sample, n_dim):
     m = torch.distributions.uniform.Uniform(0.0, 1.0)
     x = m.sample(torch.Size([n_batch, n_sample, n_dim]))
     Cx = dist_matrix(x, x, 2)
+    if equal:
+        a = torch.ones_like(a)
     return a, Cx, x
