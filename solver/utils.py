@@ -11,7 +11,7 @@ def euclid_dist(x, y):
     return np.linalg.norm(x[:, None, :] - y[None, :, :], axis=2)
 
 
-def dist_matrix(x_i, y_j, p):
+def dist_matrix(x_i, y_j, p=2):
     if p == 1:
         return (x_i[:, :, None, :] - y_j[:, None, :, :]).norm(p=2, dim=3)
     elif p == 2:
