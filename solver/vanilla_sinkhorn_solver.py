@@ -12,7 +12,7 @@ class VanillaSinkhornSolver(object):
         :param tol: Tolerance between updates of the plan to stop iterations
         :param tol_sinkhorn: Tolerance between updates of the Sinkhorn potentials to stop iterations
         :param eps: parameter of entropic regularization
-        :param rho: Parameter of relaxation of marginals. Set to None to compute GW instead of UGW.
+        :param rho: Parameter of relaxation of marginals. Set to float('Inf') to compute GW instead of UGW.
         """
         self.nits_plan = nits_plan
         self.nits_sinkhorn = nits_sinkhorn
@@ -20,8 +20,7 @@ class VanillaSinkhornSolver(object):
         self.tol_plan = tol_plan
         self.tol_sinkhorn = tol_sinkhorn
         self.set_eps(eps)
-        self.set_rho(rho)
-        self.set_rho2(rho2)
+        self.set_rho(rho, rho2)
 
     def get_eps(self):
         return self.eps
@@ -30,22 +29,17 @@ class VanillaSinkhornSolver(object):
         self.eps = eps
 
     def get_rho(self):
-        return self.rho
+        return (self.rho, self.rho2)
 
-    def set_rho(self, rho):
+    def set_rho(self, rho, rho2=None):
         if rho is None:
             raise Exception('rho must be either finite or float(Inf)')
         else:
             self.rho = rho
-
-    def get_rho2(self):
-        return self.rho2
-
-    def set_rho2(self, rho2):
-        if rho2 is None:
-            self.rho2 = self.get_rho()
-        else:
-            self.rho2 = rho2
+            if rho2 is None:
+                self.rho2 = self.rho
+            else:
+                self.rho2 = rho2
 
     @property
     def tau(self):
