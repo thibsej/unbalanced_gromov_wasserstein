@@ -3,8 +3,8 @@ import torch
 
 class VanillaSinkhornSolver(object):
 
-    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
-                 rho=None):
+    def __init__(self, nits_plan=300, nits_sinkhorn=300, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
+                 rho=float('Inf'), rho2=None):
         """
         :param nits: Number of iterations to update the plans of (U)GW
         :param nits_sinkhorn: Number of iterations to perform Sinkhorn updates in inner loop
@@ -21,6 +21,18 @@ class VanillaSinkhornSolver(object):
         self.tol_sinkhorn = tol_sinkhorn
         self.eps = eps
         self.rho = rho
+        if rho2 is None:
+            self.rho2 = rho
+        else:
+            self.rho2 = rho2
+
+    @property
+    def tau(self):
+        return 1. / (1. + self.eps / self.rho)
+
+    @property
+    def tau2(self):
+        return 1. / (1. + self.eps / self.rho2)
 
     #####################################################
     # Computation of GW costs
@@ -81,13 +93,12 @@ class VanillaSinkhornSolver(object):
         :param Cy: torch.Tensor of size [size_Y, size_Y]
         :return: torch.Tensor of size 1
         """
-        if self.rho is None:
-            return self.l2_distortion(pi, gamma, Cx, Cy) \
-                   + self.eps * self.quad_kl_div(pi, gamma, a[:, None] * b[None, :])
-        return self.l2_distortion(pi, gamma, Cx, Cy) \
-               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), a) \
-               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=0), torch.sum(gamma, dim=0), b) \
-               + self.eps * self.quad_kl_div(pi, gamma, a[:, None] * b[None, :])
+        cost = self.l2_distortion(pi, gamma, Cx, Cy) + self.eps * self.quad_kl_div(pi, gamma, a[:, None] * b[None, :])
+        if self.rho < float('Inf'):
+            cost = cost + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), a)
+        if self.rho2 < float('Inf'):
+            cost = cost + self.rho2 * self.quad_kl_div_marg(torch.sum(pi, dim=0), torch.sum(gamma, dim=0), b)
+        return cost
 
     #####################################################
     # Methods for GW loops
@@ -108,22 +119,17 @@ class VanillaSinkhornSolver(object):
             return a[:, None] * b[None, :] / (a.sum() * b.sum()).sqrt()
 
     def compute_local_cost(self, pi, a, Cx, b, Cy):
-        if self.rho is None:
-            A = torch.einsum('ij,j->i', Cx ** 2, a)
-            B = torch.einsum('kl,l->k', Cy ** 2, b)
-            C = torch.einsum('ij,kj->ik', Cx, torch.einsum('kl,jl->kj', Cy, pi))
-            kl_pi = torch.sum(pi * (pi / (a[:, None] * b[None, :]) + 1e-10).log())
-            return (A[:, None] + B[None, :] - 2 * C) + self.eps * kl_pi
-        else:
-            mu, nu = torch.sum(pi, dim=1), torch.sum(pi, dim=0)
-            A = torch.einsum('ij,j->i', Cx ** 2, mu)
-            B = torch.einsum('kl,l->k', Cy ** 2, nu)
-            C = torch.einsum('ij,kj->ik', Cx, torch.einsum('kl,jl->kj', Cy, pi))
-            kl_mu = torch.sum(mu * (mu / a + 1e-10).log())
-            kl_nu = torch.sum(nu * (nu / b + 1e-10).log())
-            kl_pi = torch.sum(pi * (pi / (a[:, None] * b[None, :]) + 1e-10).log())
-            return (A[:, None] + B[None, :] - 2 * C) \
-                   + (self.rho * kl_mu + self.rho * kl_nu + self.eps * kl_pi)
+        mu, nu = torch.sum(pi, dim=1), torch.sum(pi, dim=0)
+        A = torch.einsum('ij,j->i', Cx ** 2, mu)
+        B = torch.einsum('kl,l->k', Cy ** 2, nu)
+        C = torch.einsum('ij,kj->ik', Cx, torch.einsum('kl,jl->kj', Cy, pi))
+        kl_pi = torch.sum(pi * (pi / (a[:, None] * b[None, :]) + 1e-10).log())
+        T = (A[:, None] + B[None, :] - 2 * C) + self.eps * kl_pi
+        if self.rho < float('Inf'):
+            T = T + self.rho * torch.sum(mu * (mu / a + 1e-10).log())
+        if self.rho2 < float('Inf'):
+            T = T + self.rho2 * torch.sum(nu * (nu / b + 1e-10).log())
+        return T
 
     def ugw_sinkhorn(self, a, Cx, b, Cy, init=None):
         """
@@ -185,31 +191,23 @@ class VanillaSinkhornSolver(object):
     #####################################################
 
     def kl_prox_softmin(self, K, a, b):
-        if self.rho is None:
-            tau = 1.
-        else:
-            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(v):
-            return torch.einsum('ij,j->i', K, b * v) ** (-tau)
+            return torch.einsum('ij,j->i', K, b * v) ** (-self.tau2)
 
         def s_x(u):
-            return torch.einsum('ij,i->j', K, a * u) ** (-tau)
+            return torch.einsum('ij,i->j', K, a * u) ** (-self.tau)
 
         return s_x, s_y
 
     def aprox_softmin(self, C, a, b, mass):
-        if self.rho is None:
-            tau = 1.
-        else:
-            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(g):
-            return - mass * tau * self.eps * ((g / (mass * self.eps) + b.log())[None, :]
-                                                   - C / (mass * self.eps)).logsumexp(dim=1)
+            return - mass * self.tau2 * self.eps * ((g / (mass * self.eps) + b.log())[None, :]
+                                                    - C / (mass * self.eps)).logsumexp(dim=1)
 
         def s_x(f):
-            return - mass * tau * self.eps * ((f / (mass * self.eps) + a.log())[:, None]
+            return - mass * self.tau * self.eps * ((f / (mass * self.eps) + a.log())[:, None]
                                                    - C / (mass * self.eps)).logsumexp(dim=0)
 
         return s_x, s_y
@@ -217,7 +215,7 @@ class VanillaSinkhornSolver(object):
     def translate_potential(self, u, v, C, a, b, mass):
         """
         Initializes the potentials with the optimal constant translation for a warm start.
-        Used in the inner Sinkhorn loop.
+        Used in the inner Sinkhorn loop. It is an approximation when (rho, rho2) differ, exact otherwise.
         :param u:
         :param v:
         :param C:
@@ -226,18 +224,13 @@ class VanillaSinkhornSolver(object):
         :param mass:
         :return:
         """
-        if self.rho is None:
-            k = 0.5 * (a.sum().log()
-                       - ((u[:, None] + v[None, :] - C) / (mass * self.eps)).logsumexp(dim=1).logsumexp(dim=0))
-            return u + k, v + k
-        else:
-            c1 = (torch.sum(a * (-u / (mass * self.rho)).exp())
-                  + torch.sum(b * (-v / (mass * self.rho)).exp())).log()
-            c2 = (a.log()[:, None] * b.log()[None, :]
-                  + ((u[:, None] + v[None, :] - C) / (mass * self.eps))).logsumexp(dim=1).logsumexp(dim=0)
-            z = mass * (self.rho * self.eps) / (2 * self.rho + self.eps)
-            k = z * (c1 - c2)
-            return u + k, v + k
+        c1 = (0.5 * torch.sum(a * (-u / (mass * self.rho)).exp())
+              + 0.5 * torch.sum(b * (-v / (mass * self.rho2)).exp())).log()
+        c2 = (a.log()[:, None] * b.log()[None, :]
+              + ((u[:, None] + v[None, :] - C) / (mass * self.eps))).logsumexp(dim=1).logsumexp(dim=0)
+        z = (0.5 * mass * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
+        k = (c1 - c2) * z
+        return u + k, v + k
 
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
         if u is None or v is None:  # Initialize potentials by finding best translation
