@@ -3,8 +3,8 @@ import torch
 
 class BatchSinkhornSolver(object):
 
-    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol=1e-7, tol_sinkhorn=1e-7,
-                 eps=1.0, rho=None):
+    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7,
+                 eps=1.0, rho=float('Inf'), rho2=None):
         """
 
         :param nits: Number of iterations to update the plans of (U)GW
@@ -18,10 +18,43 @@ class BatchSinkhornSolver(object):
         self.nits_plan = nits_plan
         self.nits_sinkhorn = nits_sinkhorn
         self.gradient = gradient
-        self.tol = tol
+        self.tol_plan = tol_plan
         self.tol_sinkhorn = tol_sinkhorn
+        self.set_eps(eps)
+        self.set_rho(rho)
+        self.set_rho2(rho2)
+
+    def get_eps(self):
+        return self.eps
+
+    def set_eps(self, eps):
         self.eps = eps
-        self.rho = rho
+
+    def get_rho(self):
+        return self.rho
+
+    def set_rho(self, rho):
+        if rho is None:
+            raise Exception('rho must be either finite or float(Inf)')
+        else:
+            self.rho = rho
+
+    def get_rho2(self):
+        return self.rho2
+
+    def set_rho2(self, rho2):
+        if rho2 is None:
+            self.rho2 = self.get_rho()
+        else:
+            self.rho2 = rho2
+
+    @property
+    def tau(self):
+        return 1. / (1. + self.eps / self.rho)
+
+    @property
+    def tau2(self):
+        return 1. / (1. + self.eps / self.rho2)
 
     #####################################################
     # Computation of GW costs
@@ -81,13 +114,13 @@ class BatchSinkhornSolver(object):
         :param Cy: torch.Tensor of size [Batch, size_Y, size_Y]
         :return: torch.float of size [Batch]
         """
-        if self.rho is None:
-            return self.l2_distortion(pi, gamma, Cx, Cy) \
-                   + self.eps * self.quad_kl_div(pi, gamma, a[:, :, None] * b[:, None, :])
-        return self.l2_distortion(pi, gamma, Cx, Cy) \
-               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=2), torch.sum(gamma, dim=2), a) \
-               + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), b) \
+        cost = self.l2_distortion(pi, gamma, Cx, Cy) \
                + self.eps * self.quad_kl_div(pi, gamma, a[:, :, None] * b[:, None, :])
+        if self.rho < float('Inf'):
+            cost = cost + self.rho * self.quad_kl_div_marg(torch.sum(pi, dim=2), torch.sum(gamma, dim=2), a)
+        if self.rho2 < float('Inf'):
+            cost = cost + self.rho2 * self.quad_kl_div_marg(torch.sum(pi, dim=1), torch.sum(gamma, dim=1), b)
+        return cost
 
     #####################################################
     # Methods for GW loops
@@ -108,22 +141,17 @@ class BatchSinkhornSolver(object):
             return a[:, :, None] * b[:, None, :] / (a.sum(dim=1) * b.sum(dim=1)).sqrt()[:, None, None]
 
     def compute_local_cost(self, pi, a, Cx, b, Cy):
-        if self.rho is None:
-            A = torch.einsum('bij,bj->bi', Cx ** 2, a)
-            B = torch.einsum('bkl,bl->bk', Cy ** 2, b)
-            C = torch.einsum('bij,bkj->bik', Cx, torch.einsum('bkl,bjl->bkj', Cy, pi))
-            kl_pi = torch.sum(pi * (pi / (a[:, :, None] * b[:, None, :]) + 1e-10).log(), dim=(1,2))
-            return (A[:, :, None] + B[:, None, :] - 2 * C) + self.eps * kl_pi[:, None, None]
-        else:
-            mu, nu = torch.sum(pi, dim=2), torch.sum(pi, dim=1)
-            A = torch.einsum('bij,bj->bi', Cx ** 2, mu)
-            B = torch.einsum('bkl,bl->bk', Cy ** 2, nu)
-            C = torch.einsum('bij,bkj->bik', Cx, torch.einsum('bkl,bjl->bkj', Cy, pi))
-            kl_mu = torch.sum(mu * (mu / a + 1e-10).log(), dim=1)
-            kl_nu = torch.sum(nu * (nu / b + 1e-10).log(), dim=1)
-            kl_pi = torch.sum(pi * (pi / (a[:, :, None] * b[:, None, :]) + 1e-10).log(), dim=(1,2))
-            return (A[:, :, None] + B[:, None, :] - 2 * C) \
-                   + (self.rho * kl_mu + self.rho * kl_nu + self.eps * kl_pi)[:, None, None]
+        mu, nu = torch.sum(pi, dim=2), torch.sum(pi, dim=1)
+        A = torch.einsum('bij,bj->bi', Cx ** 2, mu)
+        B = torch.einsum('bkl,bl->bk', Cy ** 2, nu)
+        C = torch.einsum('bij,bkj->bik', Cx, torch.einsum('bkl,bjl->bkj', Cy, pi))
+        kl_pi = torch.sum(pi * (pi / (a[:, :, None] * b[:, None, :]) + 1e-10).log(), dim=(1, 2))
+        T = (A[:, :, None] + B[:, None, :] - 2 * C) + self.eps * kl_pi[:, None, None]
+        if self.rho < float('Inf'):
+            T = T + self.rho * torch.sum(mu * (mu / a + 1e-10).log(), dim=1)[:, None, None]
+        if self.rho2 < float('Inf'):
+            T = T + self.rho2 * torch.sum(nu * (nu / b + 1e-10).log(), dim=1)[:, None, None]
+        return T
 
     def ugw_sinkhorn(self, a, Cx, b, Cy, init=None):
         """
@@ -185,46 +213,36 @@ class BatchSinkhornSolver(object):
     #####################################################
 
     def kl_prox_softmin(self, K, a, b):
-        if self.rho is None:
-            tau = 1.
-        else:
-            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(v):
-            return torch.einsum('bij,bj->bi', K, b * v) ** (-tau)
+            return torch.einsum('bij,bj->bi', K, b * v) ** (-self.tau2)
 
         def s_x(u):
-            return torch.einsum('bij,bi->bj', K, a * u) ** (-tau)
+            return torch.einsum('bij,bi->bj', K, a * u) ** (-self.tau)
 
         return s_x, s_y
 
     def aprox_softmin(self, C, a, b, mass):
-        if self.rho is None:
-            tau = 1.
-        else:
-            tau = 1 / (1 + (self.eps / self.rho))
 
         def s_y(g):
-            return - mass[:, None] * tau * self.eps * ((g / self.eps + b.log())[:, None, :] - C / self.eps).logsumexp(dim=2)
+            return - mass[:, None] * self.tau2 * self.eps \
+                   * ((g / (mass * self.eps) + b.log())[:, None, :] - C / (mass * self.eps)).logsumexp(dim=2)
 
         def s_x(f):
-            return - mass[:, None] * tau * self.eps * ((f / self.eps + a.log())[:, :, None] - C / self.eps).logsumexp(dim=1)
+            return - mass[:, None] * self.tau * self.eps \
+                   * ((f / (mass * self.eps) + a.log())[:, :, None] - C / (mass * self.eps)).logsumexp(dim=1)
 
         return s_x, s_y
 
     def translate_potential(self, u, v, C, a, b, mass):
-        if self.rho is None:
-            k = 0.5 * (a.sum(dim=1).log()
-                       - ((u[:, :, None] + v[:, None, :] - C) / (mass[:, None, None] * self.eps)).logsumexp(dim=2).logsumexp(dim=1))
-            return u + k[:, None], v + k[:, None]
-        else:
-            c1 = (torch.sum(a * (-u / (mass[:, None] * self.rho)).exp(), dim=1)
-                  + torch.sum(b * (-v / (mass[:, None] * self.rho)).exp(), dim=1)).log()
-            c2 = (a.log()[:, :, None] * b.log()[:, None, :]
-                  + ((u[:, :, None] + v[:, None, :] - C) / (mass[:, None, None] * self.eps))).logsumexp(dim=2).logsumexp(dim=1)
-            z = mass * (self.rho * self.eps) / (2 * self.rho + self.eps)
-            k = z * (c1 - c2)
-            return u + k[:, None], v + k[:, None]
+        c1 = (0.5 * torch.sum(a * (-u / (mass[:, None] * self.rho)).exp(), dim=1)
+              + 0.5 * torch.sum(b * (-v / (mass[:, None] * self.rho2)).exp(), dim=1)).log()
+        c2 = (a.log()[:, :, None] * b.log()[:, None, :]
+              + ((u[:, :, None] + v[:, None, :] - C) / (mass[:, None, None] * self.eps))).logsumexp(dim=2).logsumexp(
+            dim=1)
+        z = (0.5 * mass * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
+        k = z * (c1 - c2)
+        return u + k[:, None], v + k[:, None]
 
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
         if u is None or v is None:  # Initialize potentials by finding best translation

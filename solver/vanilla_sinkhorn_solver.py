@@ -3,7 +3,7 @@ import torch
 
 class VanillaSinkhornSolver(object):
 
-    def __init__(self, nits_plan=300, nits_sinkhorn=300, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
+    def __init__(self, nits_plan=3000, nits_sinkhorn=3000, gradient=False, tol_plan=1e-7, tol_sinkhorn=1e-7, eps=1.0,
                  rho=float('Inf'), rho2=None):
         """
         :param nits: Number of iterations to update the plans of (U)GW
@@ -19,10 +19,31 @@ class VanillaSinkhornSolver(object):
         self.gradient = gradient
         self.tol_plan = tol_plan
         self.tol_sinkhorn = tol_sinkhorn
+        self.set_eps(eps)
+        self.set_rho(rho)
+        self.set_rho2(rho2)
+
+    def get_eps(self):
+        return self.eps
+
+    def set_eps(self, eps):
         self.eps = eps
-        self.rho = rho
+
+    def get_rho(self):
+        return self.rho
+
+    def set_rho(self, rho):
+        if rho is None:
+            raise Exception('rho must be either finite or float(Inf)')
+        else:
+            self.rho = rho
+
+    def get_rho2(self):
+        return self.rho2
+
+    def set_rho2(self, rho2):
         if rho2 is None:
-            self.rho2 = rho
+            self.rho2 = self.get_rho()
         else:
             self.rho2 = rho2
 
