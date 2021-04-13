@@ -27,7 +27,7 @@ cost_gamma = solv.ugw_cost(gamma, gamma, a, Cx, b, Cy)
 print("UGW cost with twice the same inputs for pi / gamma: ", (cost_pi, cost_gamma))
 
 # Switch to solving Balanced-GW
-solv.rho = None
+solv.set_rho(float('Inf'))
 
 # Compute the loss and check the biconvex relaxation
 pi, gamma = solv.alternate_sinkhorn(a, Cx, b, Cy)
