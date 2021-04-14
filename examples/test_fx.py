@@ -18,9 +18,9 @@ def create_plan(permutation):
 # Set up a solver for KL-(U)GW
 # Set rho=None to run balanced GW computation
 solv = VanillaSinkhornSolver(nits_plan=1000, nits_sinkhorn=1000, gradient=False, tol_plan=1e-5, tol_sinkhorn=1e-5,
-                             eps=0.005, rho=float("Inf"))
+                             eps=0.001, rho=float("Inf"))
 
-n_sample = 10
+n_sample = 8
 torch.manual_seed(14)
 # Generate two mm-spaces with euclidean metrics
 a, Cx, x_a = generate_measure(n_batch=1, n_sample=n_sample, n_dim=2,equal=True)
