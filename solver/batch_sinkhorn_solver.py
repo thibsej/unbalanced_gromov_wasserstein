@@ -166,7 +166,7 @@ class BatchSinkhornSolver(object):
             mp = pi.sum(dim=(1, 2))
             up, vp, pi = self.sinkhorn_gw_procedure(Tp, up, vp, a, b, mass=mp)
             pi = (mp / pi.sum(dim=(1, 2))).sqrt()[:, None, None] * pi
-            if (pi - pi_prev).abs().max().item() < 1e-7:
+            if (pi - pi_prev).abs().max().item() < self.tol_plan:
                 break
         return pi
 
@@ -198,7 +198,7 @@ class BatchSinkhornSolver(object):
             up, vp, pi = self.sinkhorn_gw_procedure(Tg, up, vp, a, b, mass=mg)
             pi = (mg / pi.sum(dim=(1, 2))).sqrt()[:, None, None] * pi
 
-            if (pi - pi_prev).abs().max().item() < 1e-7:
+            if (pi - pi_prev).abs().max().item() < self.tol_plan:
                 break
         return pi, gamma
 
@@ -220,11 +220,11 @@ class BatchSinkhornSolver(object):
 
         def s_y(g):
             return - mass[:, None] * self.tau2 * self.eps \
-                   * ((g / (mass * self.eps) + b.log())[:, None, :] - C / (mass * self.eps)).logsumexp(dim=2)
+                   * ((g / (mass[:, None] * self.eps) + b.log())[:, None, :] - C / (mass[:, None, None] * self.eps)).logsumexp(dim=2)
 
         def s_x(f):
             return - mass[:, None] * self.tau * self.eps \
-                   * ((f / (mass * self.eps) + a.log())[:, :, None] - C / (mass * self.eps)).logsumexp(dim=1)
+                   * ((f / (mass[:, None] * self.eps) + a.log())[:, :, None] - C / (mass[:, None, None] * self.eps)).logsumexp(dim=1)
 
         return s_x, s_y
 
@@ -256,7 +256,7 @@ class BatchSinkhornSolver(object):
                 u_prev = u.clone()
                 v = s_x(u)
                 u = s_y(v)
-                if ((mass[:, None] * self.eps) * (u.log() - u_prev.log())).abs().max().item() < 1e-7:
+                if ((mass[:, None] * self.eps) * (u.log() - u_prev.log())).abs().max().item() < self.tol_sinkhorn:
                     break
             pi = u[:, :, None] * v[:, None, :] * K * a[:, :, None] * b[:, None, :]
             u, v = (mass[:, None] * self.eps) * u.log(), (mass[:, None] * self.eps) * v.log()
@@ -267,7 +267,7 @@ class BatchSinkhornSolver(object):
                 u_prev = u.clone()
                 v = s_x(u)
                 u = s_y(v)
-                if (u - u_prev).abs().max().item() < 1e-7:
+                if (u - u_prev).abs().max().item() < self.tol_sinkhorn:
                     break
             pi = ((u[:, :, None] + v[:, None, :] - T) / (mass[:, None, None] * self.eps)).exp() \
                  * a[:, :, None] * b[:, None, :]
