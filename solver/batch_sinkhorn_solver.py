@@ -13,7 +13,7 @@ class BatchSinkhornSolver(object):
         :param tol: Tolerance between updates of the plan to stop iterations
         :param tol_sinkhorn: Tolerance between updates of the Sinkhorn potentials to stop iterations
         :param eps: parameter of entropic regularization
-        :param rho: Parameter of relaxation of marginals. Set to None to compute GW instead of UGW.
+        :param rho: Parameter of relaxation of marginals. Set to float('Inf') to compute GW instead of UGW.
         """
         self.nits_plan = nits_plan
         self.nits_sinkhorn = nits_sinkhorn
@@ -229,8 +229,8 @@ class BatchSinkhornSolver(object):
         return s_x, s_y
 
     def translate_potential(self, u, v, C, a, b, mass):
-        c1 = (0.5 * torch.sum(a * (-u / (mass[:, None] * self.rho)).exp(), dim=1)
-              + 0.5 * torch.sum(b * (-v / (mass[:, None] * self.rho2)).exp(), dim=1)).log()
+        c1 = ( - torch.cat((u,v), 1) / (mass[:, None] * self.rho) + torch.cat((a,b), 1).log()).logsumexp(dim=1) \
+             - torch.log(2 * torch.ones([1]))
         c2 = (a.log()[:, :, None] * b.log()[:, None, :]
               + ((u[:, :, None] + v[:, None, :] - C) / (mass[:, None, None] * self.eps))).logsumexp(dim=2).logsumexp(
             dim=1)

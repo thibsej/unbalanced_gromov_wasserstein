@@ -29,7 +29,7 @@ class VanillaSinkhornSolver(object):
         self.eps = eps
 
     def get_rho(self):
-        return (self.rho, self.rho2)
+        return self.rho, self.rho2
 
     def set_rho(self, rho, rho2=None):
         if rho is None:
@@ -133,10 +133,6 @@ class VanillaSinkhornSolver(object):
         else:
             return a[:, None] * b[None, :] / (a.sum() * b.sum()).sqrt()
 
-
-
-
-
     def compute_local_cost(self, pi, a, Cx, b, Cy):
         mu, nu = torch.sum(pi, dim=1), torch.sum(pi, dim=0)
         A = torch.einsum('ij,j->i', Cx ** 2, mu)
@@ -169,7 +165,7 @@ class VanillaSinkhornSolver(object):
             mp = pi.sum()
             up, vp, pi = self.sinkhorn_gw_procedure(Tp, up, vp, a, b, mass=mp)
             pi = (mp / pi.sum()).sqrt() * pi
-            if (pi - pi_prev).abs().max().item() < 1e-7:
+            if (pi - pi_prev).abs().max().item() < self.tol_plan:
                 break
         return pi
 
@@ -243,8 +239,8 @@ class VanillaSinkhornSolver(object):
         :param mass:
         :return:
         """
-        c1 = (0.5 * torch.sum(a * (-u / (mass * self.rho)).exp())
-              + 0.5 * torch.sum(b * (-v / (mass * self.rho2)).exp())).log()
+        c1 = (- torch.cat((u, v)) / (mass * self.rho) + torch.cat((a, b)).log()).logsumexp(dim=0) \
+             - torch.log(2 * torch.ones([1]))
         c2 = (a.log()[:, None] * b.log()[None, :]
               + ((u[:, None] + v[None, :] - C) / (mass * self.eps))).logsumexp(dim=1).logsumexp(dim=0)
         z = (0.5 * mass * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
