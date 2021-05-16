@@ -8,3 +8,4 @@ from .utils import euclid_dist, generate_measure
 from .batch_sinkhorn_solver import BatchSinkhornSolver
 from .vanilla_sinkhorn_solver import VanillaSinkhornSolver
 from .lower_bound_solver import LowerBoundSolver
+from .batch_stable_sinkhorn_solver import BatchStableSinkhornSolver
