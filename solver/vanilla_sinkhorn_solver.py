@@ -241,7 +241,7 @@ class VanillaSinkhornSolver(object):
         """
         c1 = (- torch.cat((u, v)) / (mass * self.rho) + torch.cat((a, b)).log()).logsumexp(dim=0) \
              - torch.log(2 * torch.ones([1]))
-        c2 = (a.log()[:, None] * b.log()[None, :]
+        c2 = (a.log()[:, None] + b.log()[None, :]
               + ((u[:, None] + v[None, :] - C) / (mass * self.eps))).logsumexp(dim=1).logsumexp(dim=0)
         z = (0.5 * mass * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
         k = (c1 - c2) * z

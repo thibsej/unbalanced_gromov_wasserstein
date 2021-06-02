@@ -1,7 +1,7 @@
 import torch
 
 
-class LowerBoundSolver(object):
+class BatchLowerBoundSolver(object):
 
     def __init__(self, nits_sinkhorn=3000, gradient=False, tol_sinkhorn=1e-7, eps=1.0,
                  rho=float('Inf'), rho2=None):
@@ -53,8 +53,9 @@ class LowerBoundSolver(object):
 
     @staticmethod
     def compute_local_cost(a, Cx, b, Cy):
-        h_x, h_y = torch.einsum('ij, j->i', Cx, a / a.sum()), torch.einsum('ij, j->i', Cy, b / b.sum())
-        return (h_x ** 2)[:, None] + (h_y ** 2)[None, :] - 2 * h_x[:, None] * h_y[None, :]
+        h_x = torch.einsum('bij, bj->bi', Cx, a / a.sum(dim=1)[:,None])
+        h_y = torch.einsum('bij, bj->bi', Cy, b / b.sum(dim=1)[:, None])
+        return (h_x ** 2)[:, :, None] + (h_y ** 2)[:, None, :] - 2 * h_x[:, :, None] * h_y[:, None, :]
 
     #####################################################
     # Methods for Sinkhorn loops
@@ -63,44 +64,34 @@ class LowerBoundSolver(object):
     def kl_prox_softmin(self, K, a, b):
 
         def s_y(v):
-            return torch.einsum('ij,j->i', K, b * v) ** (-self.tau2)
+            return torch.einsum('bij,bj->bi', K, b * v) ** (-self.tau2)
 
         def s_x(u):
-            return torch.einsum('ij,i->j', K, a * u) ** (-self.tau)
+            return torch.einsum('bij,bi->bj', K, a * u) ** (-self.tau)
 
         return s_x, s_y
 
     def aprox_softmin(self, C, a, b):
 
         def s_y(g):
-            return - self.tau2 * self.eps * ((g / (self.eps) + b.log())[None, :]
-                                                    - C / (self.eps)).logsumexp(dim=1)
+            return - self.tau2 * self.eps * ((g / (self.eps) + b.log())[:, None, :]
+                                                    - C / (self.eps)).logsumexp(dim=2)
 
         def s_x(f):
-            return - self.tau * self.eps * ((f / (self.eps) + a.log())[:, None]
-                                                   - C / (self.eps)).logsumexp(dim=0)
+            return - self.tau * self.eps * ((f / (self.eps) + a.log())[:, :, None]
+                                                   - C / (self.eps)).logsumexp(dim=1)
 
         return s_x, s_y
 
     def translate_potential(self, u, v, C, a, b):
-        """
-        Initializes the potentials with the optimal constant translation for a warm start.
-        Used in the inner Sinkhorn loop.
-        :param u:
-        :param v:
-        :param C:
-        :param a:
-        :param b:
-        :param mass:
-        :return:
-        """
-        c1 = (- torch.cat((u, v)) / (self.rho) + torch.cat((a, b)).log()).logsumexp(dim=0) \
+        c1 = (- torch.cat((u, v), 1) / self.rho + torch.cat((a, b), 1).log()).logsumexp(dim=1) \
              - torch.log(2 * torch.ones([1]))
-        c2 = (a.log()[:, None] + b.log()[None, :]
-              + ((u[:, None] + v[None, :] - C) / (self.eps))).logsumexp(dim=1).logsumexp(dim=0)
+        c2 = (a.log()[:, :, None] + b.log()[:, None, :]
+              + ((u[:, :, None] + v[:, None, :] - C) / self.eps)).logsumexp(dim=2).logsumexp(
+            dim=1)
         z = (0.5 * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
-        k = (c1 - c2) * z
-        return u + k, v + k
+        k = z * (c1 - c2)
+        return u + k[:, None], v + k[:, None]
 
     def compute_plan(self, a, Cx, b, Cy, u=None, v=None, exp_form=True):
         T = self.compute_local_cost(a, Cx, b, Cy)
@@ -130,7 +121,7 @@ class LowerBoundSolver(object):
                 u = s_y(v)
                 if (self.eps * (u.log() - u_prev.log())).abs().max().item() < self.tol_sinkhorn:
                     break
-            pi = u[:, None] * v[None, :] * K * a[:, None] * b[None, :]
+            pi = u[:, :, None] * v[:, None, :] * K * a[:, :, None] * b[:, None, :]
             u, v = self.eps * u.log(), self.eps * v.log()
 
         if ~exp_form:  # Else perform Sinkhorn algorithm in LSE form
@@ -141,5 +132,5 @@ class LowerBoundSolver(object):
                 u = s_y(v)
                 if (u - u_prev).abs().max().item() < self.tol_sinkhorn:
                     break
-            pi = ((u[:, None] + v[None, :] - T) / self.eps).exp() * a[:, None] * b[None, :]
+            pi = ((u[:, :, None] + v[:, None, :] - T) / self.eps).exp() * a[:, :, None] * b[:, None, :]
         return u, v, pi

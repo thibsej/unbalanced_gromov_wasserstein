@@ -165,6 +165,9 @@ class BatchSinkhornSolver(object):
             Tp = self.compute_local_cost(pi, a, Cx, b, Cy)
             mp = pi.sum(dim=(1, 2))
             up, vp, pi = self.sinkhorn_gw_procedure(Tp, up, vp, a, b, mass=mp)
+            if torch.any(torch.isnan(pi)):
+                raise Exception(f"Solver got NaN plan with params (eps, rho) = {self.get_eps(), self.get_rho()}")
+            # assert ~torch.any(torch.isnan(pi)) # Raise error is there is a nan in matrix #TODO: Debug Nans
             pi = (mp / pi.sum(dim=(1, 2))).sqrt()[:, None, None] * pi
             if (pi - pi_prev).abs().max().item() < self.tol_plan:
                 break
@@ -220,37 +223,65 @@ class BatchSinkhornSolver(object):
 
         def s_y(g):
             return - mass[:, None] * self.tau2 * self.eps \
-                   * ((g / (mass[:, None] * self.eps) + b.log())[:, None, :] - C / (mass[:, None, None] * self.eps)).logsumexp(dim=2)
+                   * ((g / (mass[:, None] * self.eps) + b.log())[:, None, :] - C / (
+                        mass[:, None, None] * self.eps)).logsumexp(dim=2)
 
         def s_x(f):
             return - mass[:, None] * self.tau * self.eps \
-                   * ((f / (mass[:, None] * self.eps) + a.log())[:, :, None] - C / (mass[:, None, None] * self.eps)).logsumexp(dim=1)
+                   * ((f / (mass[:, None] * self.eps) + a.log())[:, :, None] - C / (
+                        mass[:, None, None] * self.eps)).logsumexp(dim=1)
 
         return s_x, s_y
 
     def translate_potential(self, u, v, C, a, b, mass):
-        c1 = ( - torch.cat((u,v), 1) / (mass[:, None] * self.rho) + torch.cat((a,b), 1).log()).logsumexp(dim=1) \
+        c1 = (- torch.cat((u, v), 1) / (mass[:, None] * self.rho) + torch.cat((a, b), 1).log()).logsumexp(dim=1) \
              - torch.log(2 * torch.ones([1]))
-        c2 = (a.log()[:, :, None] * b.log()[:, None, :]
+        c2 = (a.log()[:, :, None] + b.log()[:, None, :]
               + ((u[:, :, None] + v[:, None, :] - C) / (mass[:, None, None] * self.eps))).logsumexp(dim=2).logsumexp(
             dim=1)
         z = (0.5 * mass * self.eps) / (2. + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2))
         k = z * (c1 - c2)
         return u + k[:, None], v + k[:, None]
 
-    def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=True):
+    def optimize_mass(self, Tp, pi, a, b):
+        """
+        Given a plan and its associated local cost, the method computes the optimal mass of the plan.
+        It should be a more stable estimate of the mass than the mass of the plan itself.
+        :param Tp:
+        :param logpi:
+        :param a:
+        :param b:
+        :return:
+        """
+        ma, mb = a.sum(dim=1), b.sum(dim=1)
+        mu, nu = pi.sum(dim=2), pi.sum(dim=1)
+        mtot = self.rho * ma ** 2 + self.rho2 * mb ** 2 + self.eps * (ma * mb) ** 2
+        const = (Tp * pi).sum(dim=(1, 2)) + 2 * ma * self.rho * (a * (mu / a + 1e-10).log()).sum(dim=1) \
+                + 2 * mb * self.rho * (b * (nu / b + 1e-10).log()).sum(dim=1) \
+                + ma * mb * self.rho * (a[:, :, None] * b[:, None, :] *
+                                        (pi / (a[:, :, None] * b[:, None, :]) + 1e-10).log()).sum(dim=(1, 2))
+        return - const / mtot
+
+    def sinkhorn_gw_procedure(self, T, u, v, a, b, mass, exp_form=False):  # TODO DEbug ad set to True
         if u is None or v is None:  # Initialize potentials by finding best translation
             u, v = torch.zeros_like(a), torch.zeros_like(b)
         u, v = self.translate_potential(u, v, T, a, b, mass)
 
         if exp_form:  # Check if acceleration via exp-sinkhorn has no underflow
             K = (-T / (mass[:, None, None] * self.eps)).exp()
-            exp_form = K.gt(torch.zeros_like(K)).all()
+            u_, v_ = (u / (mass[:, None] * self.eps)).exp(), (v / (mass[:, None] * self.eps)).exp()
+            mask_K = K.gt((1e-5) * torch.ones_like(K)).all()
+            mask_u = torch.gt(u_, (1e-5) * torch.ones_like(u_)).all() and \
+                     torch.gt((1e5) * torch.ones_like(u_), u_).all() and ~torch.isinf(u_).any()
+            mask_v = torch.gt(v_, (1e-5) * torch.ones_like(v_)).all() and \
+                     torch.gt((1e5) * torch.ones_like(v_), v_).all() and ~torch.isinf(v_).any()
+            exp_form = mask_K and mask_u and mask_v
             if ~exp_form:
-                del K
+                del K, u_, v_
 
         if exp_form:  # If so perform Sinkhorn
-            u, v = (u / (mass[:, None] * self.eps)).exp(), (v / (mass[:, None] * self.eps)).exp()
+            u, v = u_, v_
+            del u_, v_
             s_x, s_y = self.kl_prox_softmin(K, a, b)
             for j in range(self.nits_sinkhorn):
                 u_prev = u.clone()
