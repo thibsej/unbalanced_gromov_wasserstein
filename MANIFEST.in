@@ -1,0 +1,23 @@
+include *.rst
+include LICENSE
+include solver/__init__.py
+include *.png
+include requirements.txt
+
+recursive-include examples *.py
+recursive-include examples *.txt
+
+recursive-include picard *.py
+
+### Exclude
+
+exclude Makefile
+exclude .coveragerc
+exclude .circleci/*
+exclude *.yml
+
+exclude dictionary.txt
+exclude .mailmap
+recursive-exclude solver *.pyc
+
+recursive-exclude doc *
