@@ -30,14 +30,14 @@ inplace:
 	$(PYTHON) setup.py build_ext -i
 
 test-code:
-	$(PYTESTS) picard
+	$(PYTESTS) solver
 
 test-doc:
-	$(PYTESTS) --doctest-modules --doctest-ignore-import-errors picard
+	$(PYTESTS) --doctest-modules --doctest-ignore-import-errors solver
 
 test-coverage:
 	rm -rf coverage .coverage
-	$(PYTESTS) --cov=picard --cov-report html:coverage
+	$(PYTESTS) --cov=solver --cov-report html:coverage
 
 test: test-code test-doc test-manifest
 

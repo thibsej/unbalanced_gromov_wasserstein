@@ -20,5 +20,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install flake8
-          flake8 solver/
-          flake8 examples/
+          flake8 solver/batch_stable_sinkhorn_solver.py
+          # flake8 solver/
+          # flake8 examples/
