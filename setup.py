@@ -10,7 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
               'numpy',
-              'pytorch'
+              'torch'
           ],
     license="MIT",
 )
