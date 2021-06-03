@@ -21,3 +21,13 @@ exclude .mailmap
 recursive-exclude solver *.pyc
 
 recursive-exclude doc *
+
+recursive-exclude conic *.ipynb
+recursive-exclude examples *.ipynb
+recursive-exclude experiments_pu *.ipynb
+recursive-exclude experiments_pu *.py
+
+exclude examples/example_fx_2.py
+exclude examples/plot_matching_imbalanced_classes_3d.py
+exclude requirements.txt
+
