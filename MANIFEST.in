@@ -7,7 +7,7 @@ include requirements.txt
 recursive-include examples *.py
 recursive-include examples *.txt
 
-recursive-include picard *.py
+recursive-include solver *.py
 
 ### Exclude
 
