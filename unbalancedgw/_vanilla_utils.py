@@ -1,6 +1,8 @@
 import torch
 
 
+# TODO: Remove batch from docstrings
+
 def quad_kl_div(pi, gamma, ref):
     """Compute the quadratic entropy (KL^otimes(pi otimes gamma | ref))
     with full plans
@@ -651,4 +653,101 @@ def exp_sinkhorn(ecost, u, v, a, b, mass, eps, rho, rho2, nits_sinkhorn,
         if (u.log() - u_prev.log()).abs().max().item() * eps < tol_sinkhorn:
             break
     pi = u[:, None] * v[None, :] * ecost * a[:, None] * b[None, :]
+    return u, v, pi
+
+
+def compute_distance_histograms(a, dx, b, dy):
+    """
+    Computes the squared distance between histograms of distance of two
+    mm-spaces. The histograms are obtained by normalising measures to be
+    probabilities.
+
+    Parameters
+    ----------
+    a: torch.Tensor of size [Batch, size_X]
+    Input measure of the first mm-space.
+
+    dx: torch.Tensor of size [Batch, size_X, size_X]
+    Input metric of the first mm-space.
+
+    b: torch.Tensor of size [Batch, size_Y]
+    Input measure of the second mm-space.
+
+    dy: torch.Tensor of size [Batch, size_X, size_X]
+    Input metric of the first mm-space.
+
+    Returns
+    -------
+    lcost: torch.Tensor of size [size_X, size_Y]
+    distances between metric histograms
+    """
+    h_x = torch.einsum('ij, j->i', dx, a / a.sum())
+    h_y = torch.einsum('ij, j->i', dy, b / b.sum())
+    lcost = (h_x ** 2)[:, None] + (h_y ** 2)[None, :]
+    lcost = lcost - 2 * h_x[:, None] * h_y[None, :]
+    return lcost
+
+
+def compute_flb_plan(a, dx, b, dy, eps, rho, rho2, nits_sinkhorn,
+                     tol_sinkhorn):
+    """
+    Computes the optimal plan associated to the First Lower Bound (FLB)
+    defined in [Memoli 11'].It solved the Unbalanced OT problem between
+    histograms of distance.
+
+    Parameters
+    ----------
+    a: torch.Tensor of size [Batch, size_X]
+    Input measure of the first mm-space.
+
+    dx: torch.Tensor of size [Batch, size_X, size_X]
+    Input metric of the first mm-space.
+
+    b: torch.Tensor of size [Batch, size_Y]
+    Input measure of the second mm-space.
+
+    dy: torch.Tensor of size [Batch, size_X, size_X]
+    Input metric of the first mm-space.
+
+    eps: float
+    Strength of entropic regularization.
+
+    rho: float
+    Strength of penalty on the first marginal of pi.
+
+    rho2: float
+    Strength of penalty on the first marginal of pi. If set to None it is
+    equal to rho.
+
+    nits_sinkhorn: int
+    Maximum number of iterations to update Sinkhorn potentials in inner loop.
+
+    tol_sinkhorn: float
+    Tolerance on convergence of Sinkhorn potentials.
+
+    Returns
+    -------
+    u: torch.Tensor of size [Batch, size_X]
+    First dual potential of Sinkhorn algorithm
+
+    v: torch.Tensor of size [Batch, size_Y]
+    Second dual potential of Sinkhorn algorithm
+
+    pi: torch.Tensor of size [Batch, size_X, size_Y]
+    Optimal transport plan of the FLB problem.
+    """
+    lcost = compute_distance_histograms(a, dx, b, dy)
+
+    u, v = torch.zeros_like(a), torch.zeros_like(b)
+    u, v = log_translate_potential(u, v, lcost, a, b, 1., eps, rho, rho2)
+
+    s_x, s_y = aprox_softmin(lcost, a, b, 1., eps, rho, rho2)
+    for j in range(nits_sinkhorn):
+        u_prev = u.clone()
+        v = s_x(u)
+        u = s_y(v)
+        if (u - u_prev).abs().max().item() < tol_sinkhorn:
+            break
+    pi = ((u[:, None] + v[None, :] - lcost) / eps).exp()
+    pi = pi * a[:, None] * b[None, :]
     return u, v, pi
