@@ -18,7 +18,7 @@ from sklearn.cluster import KMeans
 
 from solver.utils import euclid_dist
 from ot.gromov import gromov_wasserstein
-from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
+from unbalancedgw.vanilla_ugw_solver import log_ugw_sinkhorn
 
 path = os.getcwd() + "/output"
 if not os.path.isdir(path):
@@ -70,8 +70,12 @@ def plot_density_matching(pi, a, x, b, y, idx, alpha, linewidth):
     ax.set_xlim(-2,5)
     ax.set_ylim(-3.5,3.5)
     ax.set_zlim(-1,6)
-    ax.scatter(x[:, 0], x[:, 1], x[:, 2], c=cmap1(0.3 * (a - np.amin(b)) / np.amin(b) + 0.4), s=10 * (a / a) ** 2, zorder=1)
-    ax.scatter(y[:, 0], y[:, 1], 0., c=cmap2(0.3 * (b - np.amin(b)) / np.amin(b) + 0.4), s=10 * (b / a) ** 2, zorder=1)
+    ax.scatter(x[:, 0], x[:, 1], x[:, 2],
+               c=cmap1(0.3 * (a - np.amin(b)) / np.amin(b) + 0.4),
+               s=10 * (a / a) ** 2, zorder=1)
+    ax.scatter(y[:, 0], y[:, 1], 0.,
+               c=cmap2(0.3 * (b - np.amin(b)) / np.amin(b) + 0.4),
+               s=10 * (b / a) ** 2, zorder=1)
 
     # Plot argmax of coupling
     for i in idx:
@@ -96,7 +100,6 @@ if __name__ == '__main__':
     n_clust = 20
     ratio = 0.7
     compute_balanced = True
-    solver = VanillaSinkhornSolver(nits_plan=500, nits_sinkhorn=1000, gradient=False, tol_plan=1e-5, tol_sinkhorn=1e-6)
 
     # Generate gaussian mixtures translated from each other
     a, x, b, y = generate_data(n1, ratio)
@@ -109,28 +112,29 @@ if __name__ == '__main__':
     idx = idx.astype(int)
 
     # Generate costs and transport plan
-    Cx, Cy = euclid_dist(x, x), euclid_dist(y, y)
+    dx, dy = euclid_dist(x, x), euclid_dist(y, y)
 
     if compute_balanced:
-        pi_b = gromov_wasserstein(Cx, Cy, a, b, loss_fun='square_loss')
+        pi_b = gromov_wasserstein(dx, dy, a, b, loss_fun='square_loss')
         plot_density_matching(pi_b, a, x, b, y, idx, alpha=1., linewidth=.5)
         plt.legend()
         plt.savefig(path + f'/fig_matching_plan_balanced_ratio{ratio}.png')
         plt.show()
 
-    Cx, Cy = torch.from_numpy(Cx), torch.from_numpy(Cy)
+    dx, dy = torch.from_numpy(dx), torch.from_numpy(dy)
 
     rho_list = [0.1]
     peps_list = [2, 1, 0, -1, -2, -3]
     for rho in rho_list:
-        solver.set_rho(rho)
         pi = None
         for p in peps_list:
             eps = 10 ** p
-            solver.eps = eps
             print(f"Params = {rho, eps}")
             a, b = torch.from_numpy(a), torch.from_numpy(b)
-            pi = solver.ugw_sinkhorn(a, Cx, b, Cy, init=pi)
+            pi = log_ugw_sinkhorn(a, dx, b, dy, init=pi, eps=eps,
+                                  rho=rho, rho2=rho,
+                                  nits_plan=1000, tol_plan=1e-5,
+                                  nits_sinkhorn=1000, tol_sinkhorn=1e-5)
             print(f"Sum of transport plans = {pi.sum().item()}")
 
             # Plot matchings between measures
@@ -138,5 +142,6 @@ if __name__ == '__main__':
             pi_ = pi.data.numpy()
             plot_density_matching(pi_, a, x, b, y, idx, alpha=1., linewidth=1.)
             plt.legend()
-            plt.savefig(path + f'/fig_matching_plan_ugw_rho{rho}_eps{eps}_ratio{ratio}.png')
+            plt.savefig(path + f'/fig_matching_plan_ugw_'
+                               f'rho{rho}_eps{eps}_ratio{ratio}.png')
             plt.show()

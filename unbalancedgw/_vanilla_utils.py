@@ -54,10 +54,10 @@ def l2_distortion(pi, gamma, dx, dy):
     L2 distortion between the metric integrated against the plans
     """
     distxx = torch.einsum(
-        "jk,j,k->i", dx ** 2, pi.sum(dim=1), gamma.sum(dim=1)
+        "jk,j,k", dx ** 2, pi.sum(dim=1), gamma.sum(dim=1)
     )
     distyy = torch.einsum(
-        "jk,j,k->i", dy ** 2, pi.sum(dim=0), gamma.sum(dim=0)
+        "jk,j,k", dy ** 2, pi.sum(dim=0), gamma.sum(dim=0)
     )
     distxy = torch.sum(
         torch.einsum("ij,jl->il", dx, pi)
@@ -151,7 +151,7 @@ def init_plan(a, b, init=None):
         )
 
 
-def compute_local_cost(pi, a, dx, b, dy, eps, rho, rho2, complete_cost=False):
+def compute_local_cost(pi, a, dx, b, dy, eps, rho, rho2, complete_cost=True):
     """Compute the local cost by averaging the distortion with the current
     transport plan.
 

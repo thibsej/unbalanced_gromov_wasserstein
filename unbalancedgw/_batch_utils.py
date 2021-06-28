@@ -181,7 +181,7 @@ def init_plan(a, b, init=None):
         )
 
 
-def compute_local_cost(pi, a, dx, b, dy, eps, rho, rho2, complete_cost=False):
+def compute_local_cost(pi, a, dx, b, dy, eps, rho, rho2, complete_cost=True):
     """Compute the local cost by averaging the distortion with the current
     transport plan.
 
