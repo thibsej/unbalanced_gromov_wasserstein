@@ -1,8 +1,8 @@
 import pytest
 
 import torch
-from solver.utils import generate_measure
-from solver.batch_stable_ugw_solver import log_batch_ugw_sinkhorn, \
+from unbalancedgw.utils import generate_measure
+from unbalancedgw.batch_stable_ugw_solver import log_batch_ugw_sinkhorn, \
     exp_batch_ugw_sinkhorn
 
 torch.manual_seed(42)
@@ -39,11 +39,11 @@ def test_solver_run_without_exception(eps, rho, rho2):
                            two_outputs=True)
 
 
-@pytest.mark.parametrize('eps,rho,rho2', [(5.0, float('Inf'), None),
-                                          (5.0, 1.0, None),
-                                          (5.0, float('Inf'), 1.0),
-                                          (5.0, 1.0, float('Inf')),
-                                          (5.0, 0.1, 1.0)])
+@pytest.mark.parametrize('eps,rho,rho2', [(10.0, float('Inf'), None),
+                                          (10.0, 1.0, None),
+                                          (10.0, float('Inf'), 1.0),
+                                          (10.0, 1.0, float('Inf')),
+                                          (10.0, 0.1, 1.0)])
 def test_consistency_both_solvers(eps, rho, rho2):
     print("test")
     l_pi, l_ga = log_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=eps,

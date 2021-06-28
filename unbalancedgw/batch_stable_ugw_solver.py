@@ -4,10 +4,10 @@ from ._batch_utils import init_plan, compute_local_cost, \
 
 
 def log_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=1.0,
-                     rho=float("Inf"), rho2=None,
-                     nits_plan=3000, tol_plan=1e-6,
-                     nits_sinkhorn=3000, tol_sinkhorn=1e-6,
-                     two_outputs=False):
+                           rho=float("Inf"), rho2=None,
+                           nits_plan=3000, tol_plan=1e-6,
+                           nits_sinkhorn=3000, tol_sinkhorn=1e-6,
+                           two_outputs=False):
     """Solves the regularized UGW problem, keeps only one plan as output.
     the algorithm is run as much as possible in log-scale.
 
@@ -94,10 +94,10 @@ def log_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=1.0,
 
 
 def exp_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=1.0,
-                     rho=float("Inf"), rho2=None,
-                     nits_plan=3000, tol_plan=1e-6,
-                     nits_sinkhorn=3000, tol_sinkhorn=1e-6,
-                     two_outputs=False):
+                           rho=float("Inf"), rho2=None,
+                           nits_plan=3000, tol_plan=1e-6,
+                           nits_sinkhorn=3000, tol_sinkhorn=1e-6,
+                           two_outputs=False):
     """Solves the regularized UGW problem, keeps only one plan as output.
     the algorithm is run as much as possible in log-scale.
 
@@ -162,7 +162,7 @@ def exp_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=1.0,
         pi_prev = pi.clone()
         mp = pi.sum(dim=(1, 2))
         ecost = (-compute_local_cost(pi, a, dx, b, dy, eps, rho, rho2) /
-                 (eps * mp[:,None,None])).exp()
+                 (eps * mp[:, None, None])).exp()
         up, vp, pi = exp_sinkhorn(
             ecost, up, vp, a, b, mp, eps, rho, rho2,
             nits_sinkhorn, tol_sinkhorn
@@ -173,7 +173,7 @@ def exp_batch_ugw_sinkhorn(a, dx, b, dy, init=None, eps=1.0,
                 f" = {eps, rho, rho2}. Try increasing argument eps or switch"
                 f" to log_ugw_sinkhorn method."
             )
-        pi = (mp / pi.sum(dim=(1,2))).sqrt() * pi
+        pi = (mp / pi.sum(dim=(1, 2))).sqrt() * pi
         if (pi - pi_prev).abs().max().item() < tol_plan:
             break
 

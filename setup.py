@@ -4,7 +4,8 @@ setup(
     name="unbalancedgw",
     distname="",
     version='0.1.0',
-    description="Computation of Unbalanced Gromov-Wasserstein distances using entropic regularization",
+    description="Computation of Unbalanced Gromov-Wasserstein distances using "
+                "entropic regularization",
     author='Thibault Sejourne',
     author_email='thibault.sejourne@ens.fr',
     url='https://github.com/thibsej/unbalanced_gromov_wasserstein',

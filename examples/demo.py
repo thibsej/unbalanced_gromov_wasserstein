@@ -23,7 +23,8 @@ rho, rho2 = 1.0, 1.0
 # Generate two mm-spaces with euclidean metrics
 a, dx, _ = generate_measure(n_batch=1, n_sample=5, n_dim=3)
 b, dy, _ = generate_measure(n_batch=1, n_sample=6, n_dim=2)
-a, b, dx, dy = a[0], b[0], dx[0], dy[0]  # Reduce the first axis to keep one space (method generates batches)
+# Reduce the first axis to keep one space (method generates batches)
+a, b, dx, dy = a[0], b[0], dx[0], dy[0]
 
 # Compute the bi-convex relaxation of the UGW problem
 pi, gamma = exp_ugw_sinkhorn(a, dx, b, dy, init=None, eps=eps,
@@ -36,7 +37,8 @@ pi, gamma = exp_ugw_sinkhorn(a, dx, b, dy, init=None, eps=eps,
 cost = ugw_cost(pi, gamma, a, dx, b, dy, eps=eps, rho=rho, rho2=rho2)
 print("Cost of the biconvex relaxation: ", cost)
 
-# Check the bi-convex relaxations is tight (otherwise the output is a local minima)
+# Check the bi-convex relaxations is tight
+# (otherwise the output is a local minima)
 cost_pi = ugw_cost(pi, pi, a, dx, b, dy, eps=eps, rho=rho, rho2=rho2)
 cost_gamma = ugw_cost(gamma, gamma, a, dx, b, dy, eps=eps, rho=rho, rho2=rho2)
 print("UGW cost with twice the same inputs for pi / gamma: ",

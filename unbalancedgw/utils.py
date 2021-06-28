@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-
 """
 Generate mm-spaces an their euclidean metric
 """
@@ -17,13 +16,14 @@ def dist_matrix(x_i, y_j, p=2):
     elif p == 2:
         return (x_i[:, :, None, :] - y_j[:, None, :, :]).norm(p=2, dim=3) ** 2
     else:
-        C_e = (x_i[:, :, None, :] - y_j[:, None, :, :]).norm(p=2, dim=3)
-        return C_e ** (p)
+        c_e = (x_i[:, :, None, :] - y_j[:, None, :, :]).norm(p=2, dim=3)
+        return c_e ** p
 
 
-def generate_measure(n_batch, n_sample, n_dim,equal = False):
+def generate_measure(n_batch, n_sample, n_dim, equal=False):
     """
-    Generate a batch of probability measures in R^d sampled over the unit square
+    Generate a batch of probability measures in R^d sampled over the unit
+    square.
     :param n_batch: Number of batches
     :param n_sample: Number of sampling points in R^d
     :param n_dim: Dimension of the feature space

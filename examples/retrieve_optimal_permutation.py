@@ -1,14 +1,15 @@
 import torch
+import itertools
+import pylab as pl
+
 from unbalancedgw.vanilla_ugw_solver import log_ugw_sinkhorn
 from unbalancedgw._vanilla_utils import l2_distortion, ugw_cost
 from solver.utils import generate_measure
 
 torch.set_printoptions(8)
-import itertools
-import pylab as pl
 
 
-## Helper that construct a plan from a permutation.
+# Helper that construct a plan from a permutation.
 def create_plan(permutation):
     n = len(permutation)
     pi = torch.zeros(n, n)

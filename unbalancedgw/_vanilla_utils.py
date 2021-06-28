@@ -446,14 +446,10 @@ def log_translate_potential(u, v, lcost, a, b, mass, eps, rho, rho2):
                         (u[:, None] + v[None, :] - lcost)
                         / (mass * eps)
                 )
-        )
-            .logsumexp(dim=1)
-            .logsumexp(dim=0)
+        ).logsumexp(dim=1).logsumexp(dim=0)
     )
     z = (0.5 * mass * eps) / (
-            2.0 + 0.5 * (eps / rho) + 0.5 * (
-            eps / rho2)
-    )
+            2.0 + 0.5 * (eps / rho) + 0.5 * (eps / rho2))
     k = z * (c1 - c2)
     return u + k, v + k
 
