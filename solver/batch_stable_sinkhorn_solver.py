@@ -3,15 +3,15 @@ import torch
 
 class BatchStableSinkhornSolver(object):
     def __init__(
-        self,
-        nits_plan=3000,
-        nits_sinkhorn=3000,
-        gradient=False,
-        tol_plan=1e-7,
-        tol_sinkhorn=1e-7,
-        eps=1.0,
-        rho=float("Inf"),
-        rho2=None,
+            self,
+            nits_plan=3000,
+            nits_sinkhorn=3000,
+            gradient=False,
+            tol_plan=1e-7,
+            tol_sinkhorn=1e-7,
+            eps=1.0,
+            rho=float("Inf"),
+            rho2=None,
     ):
         """Initialization of the solver
 
@@ -94,11 +94,11 @@ class BatchStableSinkhornSolver(object):
         """
         massp, massg = pi.sum(dim=(1, 2)), gamma.sum(dim=(1, 2))
         div = (
-            massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=(1, 2))
-            + massp
-            * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=(1, 2))
-            - massp * massg
-            + ref.sum(dim=(1, 2)) ** 2
+                massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=(1, 2))
+                + massp
+                * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=(1, 2))
+                - massp * massg
+                + ref.sum(dim=(1, 2)) ** 2
         )
         return div
 
@@ -124,13 +124,12 @@ class BatchStableSinkhornSolver(object):
         Quadratic Kl divergence between the marginals.
 
         """
-        # TODO: Update the sums with "keepdim=true for axis 0"
         massp, massg = pi.sum(dim=1), gamma.sum(dim=1)
         div = (
-            massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=1)
-            + massp * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=1)
-            - massp * massg
-            + ref.sum(dim=1) ** 2
+                massg * torch.sum(pi * (pi / ref + 1e-10).log(), dim=1)
+                + massp * torch.sum(gamma * (gamma / ref + 1e-10).log(), dim=1)
+                - massp * massg
+                + ref.sum(dim=1) ** 2
         )
         return div
 
@@ -243,9 +242,9 @@ class BatchStableSinkhornSolver(object):
             return init
         else:
             return (
-                a[:, :, None]
-                * b[:, None, :]
-                / (a.sum(dim=1) * b.sum(dim=1)).sqrt()[:, None, None]
+                    a[:, :, None]
+                    * b[:, None, :]
+                    / (a.sum(dim=1) * b.sum(dim=1)).sqrt()[:, None, None]
             )
 
     def compute_local_cost(self, pi, a, Cx, b, Cy):
@@ -285,19 +284,21 @@ class BatchStableSinkhornSolver(object):
             dim=(1, 2),
         )
         T = (A[:, :, None] + B[:, None, :] - 2 * C) + self.eps * kl_pi[
-            :, None, None
-        ]
+                                                                 :, None, None
+                                                                 ]
         if self.rho < float("Inf"):
             T = (
-                T
-                + self.rho
-                * torch.sum(mu * (mu / a + 1e-10).log(), dim=1)[:, None, None]
+                    T
+                    + self.rho
+                    * torch.sum(mu * (mu / a + 1e-10).log(), dim=1)[:, None,
+                      None]
             )
         if self.rho2 < float("Inf"):
             T = (
-                T
-                + self.rho2
-                * torch.sum(nu * (nu / b + 1e-10).log(), dim=1)[:, None, None]
+                    T
+                    + self.rho2
+                    * torch.sum(nu * (nu / b + 1e-10).log(), dim=1)[:, None,
+                      None]
             )
         return T
 
@@ -345,8 +346,8 @@ class BatchStableSinkhornSolver(object):
                     f" = {self.get_eps(), self.get_rho()}"
                 )
             logpi = (
-                0.5 * (logmp - logpi.logsumexp(dim=(1, 2)))[:, None, None]
-                + logpi
+                    0.5 * (logmp - logpi.logsumexp(dim=(1, 2)))[:, None, None]
+                    + logpi
             )
             if (logpi - logpi_prev).abs().max().item() < self.tol_plan:
                 break
@@ -417,24 +418,26 @@ class BatchStableSinkhornSolver(object):
 
         def s_y(g):
             return (
-                -mass[:, None]
-                * self.tau2
-                * self.eps
-                * (
-                    (g / (mass[:, None] * self.eps) + b.log())[:, None, :]
-                    - C / (mass[:, None, None] * self.eps)
-                ).logsumexp(dim=2)
+                    -mass[:, None]
+                    * self.tau2
+                    * self.eps
+                    * (
+                            (g / (mass[:, None] * self.eps) + b.log())[:, None,
+                            :]
+                            - C / (mass[:, None, None] * self.eps)
+                    ).logsumexp(dim=2)
             )
 
         def s_x(f):
             return (
-                -mass[:, None]
-                * self.tau
-                * self.eps
-                * (
-                    (f / (mass[:, None] * self.eps) + a.log())[:, :, None]
-                    - C / (mass[:, None, None] * self.eps)
-                ).logsumexp(dim=1)
+                    -mass[:, None]
+                    * self.tau
+                    * self.eps
+                    * (
+                            (f / (mass[:, None] * self.eps) + a.log())[:, :,
+                            None]
+                            - C / (mass[:, None, None] * self.eps)
+                    ).logsumexp(dim=1)
             )
 
         return s_x, s_y
@@ -473,74 +476,27 @@ class BatchStableSinkhornSolver(object):
         Second dual potential defined on Y.
         """
         c1 = (
-            -torch.cat((u, v), 1) / (mass[:, None] * self.rho)
-            + torch.cat((a, b), 1).log()
-        ).logsumexp(dim=1) - torch.log(2 * torch.ones([1]))
+                     -torch.cat((u, v), 1) / (mass[:, None] * self.rho)
+                     + torch.cat((a, b), 1).log()
+             ).logsumexp(dim=1) - torch.log(2 * torch.ones([1]))
         c2 = (
             (
-                a.log()[:, :, None]
-                + b.log()[:, None, :]
-                + (
-                    (u[:, :, None] + v[:, None, :] - C)
-                    / (mass[:, None, None] * self.eps)
-                )
+                    a.log()[:, :, None]
+                    + b.log()[:, None, :]
+                    + (
+                            (u[:, :, None] + v[:, None, :] - C)
+                            / (mass[:, None, None] * self.eps)
+                    )
             )
-            .logsumexp(dim=2)
-            .logsumexp(dim=1)
+                .logsumexp(dim=2)
+                .logsumexp(dim=1)
         )
         z = (0.5 * mass * self.eps) / (
-            2.0 + 0.5 * (self.eps / self.rho) + 0.5 * (self.eps / self.rho2)
+                2.0 + 0.5 * (self.eps / self.rho) + 0.5 * (
+                    self.eps / self.rho2)
         )
         k = z * (c1 - c2)
         return u + k[:, None], v + k[:, None]
-
-    def optimize_mass(self, Tp, logpi, a, b):
-        """
-        Given a plan and its associated local cost, the method computes the
-        optimal mass of the plan. It should be a more stable estimate of the
-        mass than the mass of the plan itself.
-
-        Parameters
-        ----------
-        Tp: torch.Tensor of size [Batch, size_X, size_Y]
-        Local cost depending on the current plan.
-
-        logpi: torch.Tensor of size [Batch, size_X, size_Y]
-        Optimized plan in log-scale.
-
-        a: torch.Tensor of size [Batch, size_X]
-        Input measure of the first mm-space.
-
-        b: torch.Tensor of size [Batch, size_Y]
-        Input measure of the second mm-space.
-
-        Returns
-        ----------
-        const: torch.Tensor of size [Batch]
-        Optimal constant to translate the plan in log scale.
-        """
-        ma, mb = a.sum(dim=1), b.sum(dim=1)
-        logmu, lognu = logpi.logsumexp(dim=2), logpi.logsumexp(dim=1)
-        mtot = (
-            self.rho * ma ** 2
-            + self.rho2 * mb ** 2
-            + self.eps * (ma * mb) ** 2
-        )
-        const = (
-            (Tp * logpi.exp()).sum(dim=(1, 2))
-            + 2 * ma * self.rho * (a * (logmu - a.log())).sum(dim=1)
-            + 2 * mb * self.rho2 * (b * (lognu - b.log())).sum(dim=1)
-            + 2
-            * ma
-            * mb
-            * self.eps
-            * (
-                a[:, :, None]
-                * b[:, None, :]
-                * (logpi - a.log()[:, :, None] - b.log()[:, None, :])
-            ).sum(dim=(1, 2))
-        )
-        return -const / mtot
 
     def sinkhorn_gw_procedure(self, T, u, v, a, b, mass):
         """
@@ -583,11 +539,11 @@ class BatchStableSinkhornSolver(object):
             if (u - u_prev).abs().max().item() < self.tol_sinkhorn:
                 break
         logpi = (
-            (
-                (u[:, :, None] + v[:, None, :] - T)
-                / (mass[:, None, None] * self.eps)
-            )
-            + a.log()[:, :, None]
-            + b.log()[:, None, :]
+                (
+                        (u[:, :, None] + v[:, None, :] - T)
+                        / (mass[:, None, None] * self.eps)
+                )
+                + a.log()[:, :, None]
+                + b.log()[:, None, :]
         )
         return u, v, logpi

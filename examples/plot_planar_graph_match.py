@@ -1,3 +1,12 @@
+"""
+==================================
+Using a custom density with Picard
+==================================
+
+This example shows how to use custom densities using Picard
+
+"""
+
 import os
 
 import numpy as np

@@ -9,3 +9,7 @@ from .batch_sinkhorn_solver import BatchSinkhornSolver
 from .vanilla_sinkhorn_solver import VanillaSinkhornSolver
 from .lower_bound_solver import LowerBoundSolver
 from .batch_stable_sinkhorn_solver import BatchStableSinkhornSolver
+from .batch_stable_ugw_solver import log_ugw_sinkhorn, exp_ugw_sinkhorn
+from .vanilla_ugw_solver import log_ugw_sinkhorn, exp_ugw_sinkhorn
+from ._vanilla_utils import *
+from ._batch_utils import *

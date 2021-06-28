@@ -1,9 +1,9 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="unbalanced_gromov_wasserstein",
+    name="unbalancedgw",
     distname="",
-    version="0.1.0",
+    version='0.1.0',
     description="Computation of Unbalanced Gromov-Wasserstein distances using entropic regularization",
     author='Thibault Sejourne',
     author_email='thibault.sejourne@ens.fr',
