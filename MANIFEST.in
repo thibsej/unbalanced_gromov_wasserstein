@@ -1,6 +1,6 @@
 include *.rst
 include LICENSE
-include solver/__init__.py
+include unbalancedgw/__init__.py
 include *.png
 include requirements.txt
 
