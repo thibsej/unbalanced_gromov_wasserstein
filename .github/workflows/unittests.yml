@@ -30,7 +30,7 @@ jobs:
       - name: Run Python unit tests
         run: |
           make
-          flake8 --count solver/
+          flake8 --count unbalancedgw/
           flake8 --count examples/
       - name: Upload coverage
         run: |
