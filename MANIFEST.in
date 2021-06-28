@@ -7,7 +7,7 @@ include requirements.txt
 recursive-include examples *.py
 recursive-include examples *.txt
 
-recursive-include solver *.py
+recursive-include unbalancedgw *.py
 
 ### Exclude
 
@@ -18,7 +18,7 @@ exclude *.yml
 
 exclude dictionary.txt
 exclude .mailmap
-recursive-exclude solver *.pyc
+recursive-exclude unbalancedgw *.pyc
 
 recursive-exclude doc *
 

@@ -30,14 +30,14 @@ inplace:
 	$(PYTHON) setup.py build_ext -i
 
 test-code:
-	$(PYTESTS) solver
+	$(PYTESTS) unbalancedgw
 
 test-doc:
-	$(PYTESTS) --doctest-modules --doctest-ignore-import-errors solver
+	$(PYTESTS) --doctest-modules --doctest-ignore-import-errors unbalancedgw
 
 test-coverage:
 	rm -rf coverage .coverage
-	$(PYTESTS) --cov=solver --cov-report html:coverage
+	$(PYTESTS) --cov=unbalancedgw --cov-report html:coverage
 
 test: test-code test-doc test-manifest
 

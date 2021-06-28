@@ -30,7 +30,8 @@ jobs:
       - name: Run Python unit tests
         run: |
           make
-          flake8 --count solver/batch_stable_sinkhorn_solver.py
+          flake8 --count solver/
+          flake8 --count examples/
       - name: Upload coverage
         run: |
           bash <(curl -s https://codecov.io/bash)
