@@ -9,7 +9,7 @@ setup(
     author='Thibault Sejourne',
     author_email='thibault.sejourne@ens.fr',
     url='https://github.com/thibsej/unbalanced_gromov_wasserstein',
-    packages=find_packages(),
+    packages=['unbalancedgw', 'unbalancedgw.tests'],
     install_requires=[
               'numpy',
               'torch'
