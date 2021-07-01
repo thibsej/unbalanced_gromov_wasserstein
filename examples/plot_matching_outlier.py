@@ -1,9 +1,10 @@
 """
-==================================
-Using a custom density with Picard
-==================================
+=============================
+Using UGW to discard outliers
+=============================
 
-This example shows how to use custom densities using Picard
+This example shows how UGW impacts the accounting of geometric outliers in
+the data.
 
 """
 
@@ -24,7 +25,8 @@ path = path + "/plots"
 if not os.path.isdir(path):
     os.mkdir(path)
 
-torch.set_default_tensor_type(torch.cuda.FloatTensor)
+if torch.cuda.is_available():
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
 torch.manual_seed(42)
 
 

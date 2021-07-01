@@ -1,3 +1,13 @@
+"""
+=================================
+Using UGW to retrieve permutation
+=================================
+
+This example shows UGW retrieves permutation of pointcoulds, up to the
+entropic approximation.
+
+"""
+
 import torch
 import itertools
 import pylab as pl
@@ -7,6 +17,7 @@ from unbalancedgw._vanilla_utils import l2_distortion, ugw_cost
 from solver.utils import generate_measure
 
 torch.set_printoptions(8)
+torch.manual_seed(14)
 
 
 # Helper that construct a plan from a permutation.
@@ -19,7 +30,6 @@ def create_plan(permutation):
 
 
 n_sample = 8
-torch.manual_seed(14)
 # Generate two mm-spaces with euclidean metrics
 a, dx, x_a = generate_measure(n_batch=1, n_sample=n_sample, n_dim=2,
                               equal=True)

@@ -1,9 +1,10 @@
 """
-==================================
-Using a custom density with Picard
-==================================
+===========================
+Using UGW to compare graphs
+===========================
 
-This example shows how to use custom densities using Picard
+This example shows UGW matches two graphs with similar graphs having
+different substructures. The comparison is performed with GW.
 
 """
 # TODO: DEbug it, graphs are not consistent
@@ -27,8 +28,6 @@ from ot.partial import (
     entropic_partial_gromov_wasserstein,
     partial_wasserstein,
 )
-
-# from solver.vanilla_sinkhorn_solver import VanillaSinkhornSolver
 from unbalancedgw.vanilla_ugw_solver import log_ugw_sinkhorn
 
 path = os.getcwd() + "/output"
@@ -38,7 +37,8 @@ path = path + "/plots_graph"
 if not os.path.isdir(path):
     os.mkdir(path)
 
-torch.set_default_tensor_type(torch.cuda.FloatTensor)
+if torch.cuda.is_available():
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 
 def generate_data_target(sig=0.05):

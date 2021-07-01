@@ -1,9 +1,9 @@
 """
-==================================
-Using a custom density with Picard
-==================================
+======================================
+Comparing imbalanced pointclouds in 3D
+======================================
 
-This example shows how to use custom densities using Picard
+This example shows how UGW matches two 3D pointclouds with imbalanced weights.
 
 """
 

@@ -1,9 +1,9 @@
 """
 ==================================
-Using a custom density with Picard
+Using a basic example of unbalancedgw
 ==================================
 
-This example shows how to use custom densities using Picard
+This example shows how to use the basic functions and solver of UGW.
 
 """
 
@@ -44,7 +44,7 @@ cost_gamma = ugw_cost(gamma, gamma, a, dx, b, dy, eps=eps, rho=rho, rho2=rho2)
 print("UGW cost with twice the same inputs for pi / gamma: ",
       (cost_pi, cost_gamma))
 
-# Switch to solving Unbalanced-KL-GW
+# Switch to solving Balanced-GW
 rho, rho2 = float("Inf"), float("Inf")
 
 # Compute the loss and check the biconvex relaxation
