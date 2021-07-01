@@ -18,16 +18,14 @@ exclude *.yml
 
 exclude dictionary.txt
 exclude .mailmap
+exclude examples/plot_planar_graph_match.py
 recursive-exclude unbalancedgw *.pyc
 
 recursive-exclude doc *
-
-recursive-exclude conic *.ipynb
+recursive-exclude conic *
 recursive-exclude examples *.ipynb
-recursive-exclude experiments_pu *.ipynb
-recursive-exclude experiments_pu *.py
+recursive-exclude experiments_pu *
 
-exclude examples/example_fx_2.py
-exclude examples/plot_matching_imbalanced_classes_3d.py
+
 exclude requirements.txt
 
