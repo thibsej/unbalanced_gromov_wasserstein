@@ -6,129 +6,15 @@ Created on Tue Feb 11 15:03:33 2020
 @author: lchapel
 """
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import math
 
-from sklearn.datasets import make_moons
 from sklearn.datasets import load_svmlight_file
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 import torch
 from torchvision import datasets
 import scipy.io as sio
-
-
-
-def plot_dataset(P, U, y, dim='2d', ax=None, y_hat=None, transp=None):
-    """Plot a dataset
-
-    Parameters
-    ----------
-    P: pandas dataframe, shape=(n_p, d_p)
-        Positive dataset
-
-    U: pandas dataframe, shape=(n_u, d_u)
-        Unlabeled dataset
-
-    y: array, len=n_u
-        Labels on the unlabeled dataframe. Should be 0 (negatives) or 1 (pos)
-
-    dim: string (default: '2d')
-        Choose between a '2d' or '3d' plot
-
-    y_hat: array, len=n_u (default: None)
-        Predicted labels of the unlabeled dataframe.
-        If None, no labels are displayed.
-    """
-    if ax is None:
-        fig = plt.figure()
-        if dim == '3d':
-            ax = fig.add_subplot(111, projection='3d')
-        else:
-            ax = fig.add_subplot(111)
-    if dim == '3d':
-        ax.scatter(P.feature1, P.feature2, P.feature3, c='k', marker='o',
-                   linewidth=1, label='P')
-    elif dim == '2d':
-        ax.scatter(
-            P.feature1, P.feature2, c='k', marker='o', linewidth=1, s=50,
-            label='P')
-    else:
-        raise ValueError("dim argument takes either '2d' or '3d' argument")
-    if y_hat is None:
-        pos_1 = np.where(y == 1)
-        pos_0 = np.where(y == 0)
-        if dim == '3d':
-            ax.view_init(elev=40., azim=100)
-            ax.scatter(U.feature1, U.feature2, zs=0, zdir='z', label='U')
-        else:
-            ax.scatter(
-                U.iloc[pos_1].feature1, U.iloc[pos_1].feature2,
-                s=70, facecolors='none', edgecolors='b', label='P+U')
-            ax.scatter(
-                U.iloc[pos_0].feature1, U.iloc[pos_0].feature2,
-                c='b', marker='+', linewidth=1, s=70, alpha=0.5, label='N+U')
-    else:
-        if dim == '3d':
-            ax.view_init(elev=40., azim=100)
-            ax.scatter(U.feature1, U.feature2,
-                       zs=0, zdir='z', label='U', c='b')
-        else:
-            for i, y_i in enumerate(y):
-                if (y_i == 1 and y_hat[i] == 1):
-                    ax.scatter(U.iloc[i].feature1, U.iloc[i].feature2, s=70,
-                               facecolors='none', edgecolors='b', label='P+U')
-                if (y_i == 0 and y_hat[i] == 0):
-                    ax.scatter(U.iloc[i].feature1, U.iloc[i].feature2, s=70,
-                               c='b', marker='+', linewidth=1, alpha=0.5,
-                               label='N+U')
-                if (y_i == 0 and y_hat[i] == 1):
-                    ax.scatter(U.iloc[i].feature1, U.iloc[i].feature2, s=70,
-                               facecolors='none', edgecolors='r')
-                if (y_i == 1 and y_hat[i] == 0):
-                    ax.scatter(U.iloc[i].feature1, U.iloc[i].feature2, c='r',
-                               marker='+', linewidth=1, s=70, alpha=0.5)
-
-    ax.tick_params(axis='x', which='both', bottom=False, top=False,
-                   labelbottom=False)
-    ax.tick_params(axis='y', which='both', left=False, right=False,
-                   labelleft=False)
-    if dim == '3d':
-        ax.tick_params(axis='z', which='both', left=False, right=False,
-                       labelleft=False)
-    if transp is not None:
-        for i in range(transp.shape[0]):
-            for j in range(transp.shape[1]):
-                if transp[i, j] > 1e-5:
-                    if dim == '2d':
-                        ax.plot([P.iloc[i].feature1, U.iloc[j].feature1],
-                                [P.iloc[i].feature2, U.iloc[j].feature2], 'k',
-                                alpha=0.15)
-                    elif dim == '3d':
-                        ax.plot([P.iloc[i].feature1, U.iloc[j].feature1],
-                                [P.iloc[i].feature2, U.iloc[j].feature2],
-                                [P.iloc[i].feature3, 0], 'k', alpha=0.05)
-
-
-def annotate_transp_matrix(ax):
-    ax.text(0.3, -0.05, 'Unl. positives', horizontalalignment='center',
-            verticalalignment='center', transform=ax.transAxes, c='b', size=20)
-    ax.text(0.85, -0.05, 'Unl. negatives', horizontalalignment='center',
-            verticalalignment='center', transform=ax.transAxes, c='b', size=20)
-    ax.text(-0.05, 0.51, 'Positives', horizontalalignment='center',
-            verticalalignment='center', transform=ax.transAxes, rotation=90,
-            size=20)
-    ax.text(-0.05, 0.06, 'D', horizontalalignment='center',
-            verticalalignment='center', transform=ax.transAxes, rotation=90,
-            size=20)
-    ax.axvline(x=5.5, color='k', linewidth=2)
-    ax.axhline(y=9.5, color='k')
-    ax.tick_params(axis='x', which='both', bottom=False, top=False,
-                   labelbottom=False)
-    ax.tick_params(axis='y', which='both', left=False, right=False,
-                   labelleft=False)
 
 
 def make_data(dataset='mnist'):
