@@ -81,7 +81,8 @@ pip install -r requirements.txt
 ```
 
 ### Download the data
-The data is available [here](http://people.eecs.berkeley.edu/~jhoffman/domainadapt/#datasets_code)
+The data is available [here](http://people.eecs.berkeley.edu/~jhoffman/domainadapt/#datasets_code).
+You should store it in a folder located at /unbalanced_gromov_wasserstein/experiments_pu/data.
 
 ### Compute the prediction and accuracies
 To compute the prediction and convert the accuracies in a pandas dataframe, run:
