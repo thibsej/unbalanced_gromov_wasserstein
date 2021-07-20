@@ -21,4 +21,4 @@ jobs:
           pip install --upgrade pip
           pip install flake8
           flake8 unbalancedgw/
-          flake8 examples/
+          flake8 examples/*.py

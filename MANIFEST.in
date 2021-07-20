@@ -24,6 +24,9 @@ recursive-exclude unbalancedgw *.pyc
 recursive-exclude doc *
 recursive-exclude conic *
 recursive-exclude examples *.ipynb
+recursive-exclude examples/SCOT *
+recursive-exclude examples/code-meyer *
+recursive-exclude examples/output *
 recursive-exclude experiments_pu *
 
 

@@ -31,7 +31,7 @@ jobs:
         run: |
           make
           flake8 --count unbalancedgw/
-          flake8 --count examples/
+          flake8 --count examples/*.py
       - name: Upload coverage
         run: |
           bash <(curl -s https://codecov.io/bash)
