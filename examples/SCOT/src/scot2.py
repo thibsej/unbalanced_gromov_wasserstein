@@ -22,7 +22,8 @@ from sklearn.preprocessing import StandardScaler, normalize
 # For convergence errors and parameter warnings:
 import sys
 import warnings
-import utils as ut
+# import utils as ut
+from .utils import get_graph_distance_matrix
 
 
 class SCOT(object):
@@ -91,8 +92,8 @@ class SCOT(object):
         self.Cy = []
         if type(k) != list:
             k = [k for i in range(self.num_y)]
-        self.Cx = [ut.get_graph_distance_matrix(self.X, k[iy],  mode, metric) for iy in range(self.num_y)]
-        self.Cy = [ut.get_graph_distance_matrix(self.y[iy], k[iy], mode, metric) for iy in range(self.num_y)]
+        self.Cx = [get_graph_distance_matrix(self.X, k[iy],  mode, metric) for iy in range(self.num_y)]
+        self.Cy = [get_graph_distance_matrix(self.y[iy], k[iy], mode, metric) for iy in range(self.num_y)]
 
     def entropic_gromov_wasserstein(self, iy, loss_fun, epsilon, rho=0.05, max_iter=1000, tol=1e-9, verbose=False, balanced = True):
         """
